@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spatial Journalism Engine - Story Generator</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/forms.css">
+</head>
+<body>
+  <div class="app">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-brand">
+        <h1>SJ Engine</h1>
+        <span class="badge">Story Generator</span>
+      </div>
+      <div class="header-actions">
+        <button class="btn btn-secondary" id="btn-import">
+          <span class="icon">📂</span> Import JSON
+        </button>
+        <button class="btn btn-primary" id="btn-export">
+          <span class="icon">💾</span> Export JSON
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="main-content">
+      <!-- Sidebar Navigation -->
+      <nav class="sidebar">
+        <ul class="nav-list">
+          <li class="nav-item active" data-section="project">
+            <span class="icon">📋</span> Project Settings
+          </li>
+          <li class="nav-item" data-section="scenes">
+            <span class="icon">🎬</span> Scenes
+          </li>
+          <li class="nav-item" data-section="ui">
+            <span class="icon">🎨</span> UI & Branding
+          </li>
+          <li class="nav-item" data-section="ending">
+            <span class="icon">🏁</span> Ending
+          </li>
+          <li class="nav-item" data-section="preview">
+            <span class="icon">👁️</span> Preview JSON
+          </li>
+        </ul>
+      </nav>
+
+      <!-- Form Sections -->
+      <main class="content">
+        <!-- Project Section -->
+        <section class="section active" id="section-project">
+          <h2>Project Settings</h2>
+          <p class="section-desc">Configure the basic settings for your spatial journalism story.</p>
+          
+          <div class="form-group">
+            <label for="project-title">Story Title</label>
+            <input type="text" id="project-title" placeholder="Enter story title" class="input">
+          </div>
+
+          <div class="form-group">
+            <label for="project-version">Version</label>
+            <input type="text" id="project-version" value="1.0" class="input">
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="project-languages">Languages</label>
+              <div class="tag-input" id="languages-container">
+                <span class="tag" data-value="en">en <button class="tag-remove">&times;</button></span>
+                <input type="text" id="project-languages" placeholder="Add language..." class="input-inline">
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="project-default-lang">Default Language</label>
+              <select id="project-default-lang" class="select">
+                <option value="en">English (en)</option>
+                <option value="fi">Finnish (fi)</option>
+              </select>
+            </div>
+          </div>
+
+          <h3>Assets</h3>
+          <div class="form-group">
+            <label for="assets-base-path">Base Path</label>
+            <input type="text" id="assets-base-path" value="./assets/" class="input">
+          </div>
+          
+          <div class="form-group">
+            <label for="assets-environment">Environment Model (GLB)</label>
+            <div class="file-input">
+              <input type="text" id="assets-environment" placeholder="models/room.glb" class="input">
+              <button class="btn btn-small">Browse</button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="project-modes">Available Modes</label>
+            <div class="checkbox-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="mode-ar" checked> AR Mode
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="mode-3d" checked> 3D Mode
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="mode-guided"> Guided
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="mode-exploration"> Exploration
+              </label>
+            </div>
+          </div>
+        </section>
+
+        <!-- Scenes Section -->
+        <section class="section" id="section-scenes">
+          <div class="section-header">
+            <div>
+              <h2>Scenes</h2>
+              <p class="section-desc">Add and configure scenes for your story.</p>
+            </div>
+            <button class="btn btn-primary" id="btn-add-scene">
+              <span class="icon">+</span> Add Scene
+            </button>
+          </div>
+
+          <div class="scenes-list" id="scenes-list">
+            <!-- Scene cards will be added here -->
+          </div>
+        </section>
+
+        <!-- UI Section -->
+        <section class="section" id="section-ui">
+          <h2>UI & Branding</h2>
+          <p class="section-desc">Customize the look and feel of your experience.</p>
+
+          <h3>Home Screen</h3>
+          <div class="form-group">
+            <label>Title (Localized)</label>
+            <div class="localized-input" id="ui-title-container">
+              <!-- Will be populated based on languages -->
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Subtitle (Localized)</label>
+            <div class="localized-input" id="ui-subtitle-container">
+              <!-- Will be populated based on languages -->
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="ui-bg-image">Background Image (Mobile)</label>
+              <input type="text" id="ui-bg-image" placeholder="images/background.jpg" class="input">
+            </div>
+            <div class="form-group">
+              <label for="ui-bg-image-desktop">Background Image (Desktop)</label>
+              <input type="text" id="ui-bg-image-desktop" placeholder="images/bg_desktop.png" class="input">
+            </div>
+          </div>
+
+          <h3>Branding</h3>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="ui-logo">Logo</label>
+              <input type="text" id="ui-logo" placeholder="logos/logo.png" class="input">
+            </div>
+            <div class="form-group">
+              <label for="ui-primary-color">Primary Color</label>
+              <div class="color-input">
+                <input type="color" id="ui-primary-color-picker" value="#ffffff">
+                <input type="text" id="ui-primary-color" value="#ffffff" class="input">
+              </div>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="ui-font">Custom Font</label>
+              <input type="text" id="ui-font" placeholder="YleNext" class="input">
+            </div>
+            <div class="form-group">
+              <label for="ui-font-woff2">Font File (WOFF2)</label>
+              <input type="text" id="ui-font-woff2" placeholder="fonts/custom.woff2" class="input">
+            </div>
+          </div>
+
+          <h3>Controls</h3>
+          <div class="checkbox-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="ctrl-recenter" checked> Show Recenter Button
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="ctrl-skip" checked> Show Skip Button
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="ctrl-settings" checked> Show Settings Button
+            </label>
+          </div>
+        </section>
+
+        <!-- Ending Section -->
+        <section class="section" id="section-ending">
+          <h2>Ending</h2>
+          <p class="section-desc">Configure the ending sequence for your story.</p>
+
+          <div class="form-group">
+            <label for="ending-video">Ending Video</label>
+            <input type="text" id="ending-video" placeholder="video/ending.mp4" class="input">
+          </div>
+
+          <div class="form-group">
+            <label>Ending Text (Localized)</label>
+            <div class="localized-input" id="ending-text-container">
+              <!-- Will be populated based on languages -->
+            </div>
+          </div>
+
+          <h3>Credits</h3>
+          <div id="credits-list">
+            <!-- Credit entries will be added here -->
+          </div>
+          <button class="btn btn-secondary" id="btn-add-credit">
+            <span class="icon">+</span> Add Credit
+          </button>
+        </section>
+
+        <!-- Preview Section -->
+        <section class="section" id="section-preview">
+          <h2>Preview JSON</h2>
+          <p class="section-desc">Review the generated JSON configuration.</p>
+          
+          <div class="json-preview">
+            <pre id="json-output"></pre>
+          </div>
+          
+          <div class="preview-actions">
+            <button class="btn btn-secondary" id="btn-copy-json">
+              <span class="icon">📋</span> Copy to Clipboard
+            </button>
+            <button class="btn btn-primary" id="btn-download-json">
+              <span class="icon">💾</span> Download story.json
+            </button>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- Scene Editor Modal -->
+  <div class="modal" id="scene-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="scene-modal-title">Edit Scene</h3>
+        <button class="modal-close" id="scene-modal-close">&times;</button>
+      </div>
+      <div class="modal-body" id="scene-modal-body">
+        <!-- Scene form will be loaded here -->
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="scene-modal-cancel">Cancel</button>
+        <button class="btn btn-primary" id="scene-modal-save">Save Scene</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Import Modal -->
+  <div class="modal" id="import-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Import JSON</h3>
+        <button class="modal-close" id="import-modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="import-file">Select JSON File</label>
+          <input type="file" id="import-file" accept=".json" class="input">
+        </div>
+        <div class="form-group">
+          <label for="import-text">Or Paste JSON</label>
+          <textarea id="import-text" class="textarea" rows="10" placeholder="Paste your story.json here..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="import-modal-cancel">Cancel</button>
+        <button class="btn btn-primary" id="import-modal-submit">Import</button>
+      </div>
+    </div>
+  </div>
+
+  <input type="file" id="hidden-file-input" style="display:none" accept=".json">
+
+  <script src="js/app.js" type="module"></script>
+</body>
+</html>

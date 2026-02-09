@@ -1,0 +1,355 @@
+{
+  "project": {
+    "title": "Shadows of the Stabilisation Point",
+    "version": "1.0",
+    "languages": ["en", "fi"],
+    "defaultLanguage": "fi",
+    "modes": ["ar", "3d"],
+    "assets": {
+      "basePath": "./assets/",
+      "environment": "models/room_text_resize.glb",
+      "preload": [
+        "models/Olena_animations.glb",
+        "models/Oleh_animations.glb",
+        "models/chair.glb",
+        "audio/Scene_1.mp3",
+        "video/Intro_FIN.mp4",
+        "video/Intro_EN.mp4"
+      ]
+    }
+  },
+  "scenes": [
+    {
+      "id": "scene1",
+      "name": {
+        "en": "Introduction",
+        "fi": "Johdanto"
+      },
+      "audio": {
+        "url": "audio/Scene_1.mp3",
+        "volume": 0.5,
+        "loop": false,
+        "autoplay": true,
+        "delay": 1000
+      },
+      "characters": [
+        {
+          "id": "olena_scene1",
+          "model": "models/Olena_animations.glb",
+          "position": [-2, -25, -5],
+          "scale": 10,
+          "rotation": [0, 45, 0],
+          "animation": "Talking_Olena"
+        }
+      ],
+      "videos": [
+        {
+          "id": "Olena-intro",
+          "url": "video/Olena_name.mp4",
+          "position": [-15.3, -7.0, 5.25],
+          "rotation": [0, 90, 0],
+          "size": [64, 40],
+          "opacity": 0.9,
+          "loop": false,
+          "muted": true,
+          "triggerAt": 0.1
+        },
+        {
+          "id": "StabilisationPointIntro",
+          "url": "video/Olena2_compressed.mp4",
+          "position": [-15.3, -7.0, 5.25],
+          "rotation": [0, 90, 0],
+          "size": [64, 40],
+          "opacity": 0.9,
+          "loop": false,
+          "triggerAt": 4
+        }
+      ],
+      "lighting": {
+        "ambient": 1,
+        "directional": 1,
+        "hemisphere": 1
+      },
+      "nextScene": "scene2"
+    },
+    {
+      "id": "scene2",
+      "name": {
+        "en": "Bed 1 - Oleh's Story",
+        "fi": "Sänky 1 - Olehin tarina"
+      },
+      "audio": {
+        "url": "audio/Scene_2.mp3",
+        "volume": 0.5,
+        "loop": false,
+        "autoplay": true,
+        "delay": 0
+      },
+      "characters": [
+        {
+          "id": "oleh_scene2",
+          "model": "models/Oleh_animations.glb",
+          "position": [4, -30.2, 5],
+          "scale": 10,
+          "rotation": [0, 90, 0],
+          "animation": "Talking_Oleh"
+        },
+        {
+          "id": "olena_scene2",
+          "model": "models/Olena_animations.glb",
+          "position": [4, -25, 11],
+          "scale": 10,
+          "rotation": [0, 180, 0],
+          "animation": "Talking_Olena",
+          "delay": 70000
+        }
+      ],
+      "videos": [
+        {
+          "id": "Oleh-video",
+          "url": "video/1-Oleh_helmetcam-compressed.mp4",
+          "position": [-14, -5.5, 7.5],
+          "rotation": [0, 90, 0],
+          "size": [64, 40],
+          "opacity": 0.9,
+          "muted": true,
+          "triggerAt": 4.5
+        },
+        {
+          "id": "Oleh-video2",
+          "url": "video/Bringing_Oleh_compressed.mp4",
+          "position": [-14, -7.0, 7.5],
+          "rotation": [0, 90, 0],
+          "size": [64, 40],
+          "triggerAt": 12
+        },
+        {
+          "id": "Oleh-video3",
+          "url": "video/5-Trenches_Compressed.mp4",
+          "position": [-14, -7.0, 7.5],
+          "rotation": [0, 90, 0],
+          "size": [64, 30],
+          "triggerAt": 73
+        },
+        {
+          "id": "Oleh-video4",
+          "url": "video/6-Ambulance_Compressed.mp4",
+          "multiWall": true,
+          "muted": true,
+          "walls": [
+            { "position": [-14, -7.0, 20.5], "rotation": [0, 90, 0] },
+            { "position": [22.5, -7.0, 20.5], "rotation": [0, -90, 0] },
+            { "position": [3, -7.0, 52.5], "rotation": [0, 180, 0] },
+            { "position": [6, -7.0, -10.0], "rotation": [0, 0, 0] }
+          ],
+          "size": [64, 40],
+          "triggerAt": 115
+        },
+        {
+          "id": "Oleh-video5",
+          "url": "video/Stabpoint.mp4",
+          "position": [-14, -7.0, 7.5],
+          "rotation": [0, 90, 0],
+          "size": [64, 30],
+          "triggerAt": 167
+        }
+      ],
+      "lighting": {
+        "position": [4, -3.5, 7.5],
+        "ambient": 0.5,
+        "directional": 0.6,
+        "hemisphere": 0.4
+      },
+      "nextScene": "scene3"
+    },
+    {
+      "id": "scene3",
+      "name": {
+        "en": "Bed 2 - Walking Tour",
+        "fi": "Sänky 2 - Kävelykierros"
+      },
+      "audio": {
+        "url": "audio/Scene_3.mp3",
+        "volume": 0.5,
+        "loop": false,
+        "autoplay": true,
+        "delay": 1000,
+        "positional": true,
+        "position": [4, -3.5, 20.1],
+        "refDistance": 15,
+        "maxDistance": 50,
+        "waypoints": [
+          { "time": 5, "position": [26, -15.0, 19] },
+          { "time": 25, "position": [26, -15.0, 25] },
+          { "time": 46, "position": [24, -19.0, 51] },
+          { "time": 56, "position": [14, -17.0, 51] },
+          { "time": 81, "position": [-12, -13.0, 51] },
+          { "time": 108, "position": [-11, -14.0, 40] },
+          { "time": 116, "position": [-17, -11.0, 47] },
+          { "time": 127, "position": [15, -14.0, -7.5] },
+          { "time": 166, "position": [-9, -23.0, 25.5] },
+          { "time": 179, "position": [27.5, -5.0, 39] },
+          { "time": 192, "position": [27, -4, 28] }
+        ]
+      },
+      "characters": [
+        {
+          "id": "olena_scene3",
+          "model": "models/Olena_animations.glb",
+          "position": [2, -25, -5],
+          "scale": 12
+        }
+      ],
+      "videos": [
+        {
+          "id": "Hard-conditions",
+          "url": "video/1-Hard_Conditions.mp4",
+          "position": [-14, -7.0, 11],
+          "rotation": [0, 90, 0],
+          "size": [64, 40],
+          "triggerAt": 212
+        },
+        {
+          "id": "Crying",
+          "url": "video/2-Crying.mp4",
+          "position": [-14, -7.0, 11],
+          "rotation": [0, 90, 0],
+          "size": [64, 40],
+          "triggerAt": 227
+        },
+        {
+          "id": "Electricity",
+          "url": "video/3-Electricity.mp4",
+          "position": [-14, -7.0, 11],
+          "rotation": [0, 90, 0],
+          "size": [64, 40],
+          "triggerAt": 254
+        },
+        {
+          "id": "Security",
+          "url": "video/4-Security.mp4",
+          "position": [-14, -7.0, 11],
+          "rotation": [0, 90, 0],
+          "size": [64, 40],
+          "triggerAt": 276
+        }
+      ],
+      "lighting": {
+        "position": [4, -3.5, 20.1],
+        "ambient": 1,
+        "directional": 1,
+        "hemisphere": 1
+      },
+      "nextScene": "scene4"
+    },
+    {
+      "id": "scene4",
+      "name": {
+        "en": "Bed 3 - Final Chapter",
+        "fi": "Sänky 3 - Viimeinen luku"
+      },
+      "audio": {
+        "url": "audio/Scene_4.mp3",
+        "volume": 0.5,
+        "loop": false,
+        "autoplay": true
+      },
+      "characters": [
+        {
+          "id": "olena_scene4",
+          "model": "models/Olena_animations.glb",
+          "position": [-5, -24, 48],
+          "rotation": [0, 180, 0],
+          "scale": 10,
+          "animation": "Sitting_Talking_Olena"
+        },
+        {
+          "id": "oleh_scene4",
+          "model": "models/Oleh_animations.glb",
+          "position": [3, -32, 36.407],
+          "scale": 10,
+          "rotation": [0, 90, 0],
+          "animation": "Idle_Oleh",
+          "delay": 15000
+        }
+      ],
+      "objects": [
+        {
+          "id": "chair_scene4",
+          "model": "models/chair.glb",
+          "position": [-5, -25, 48],
+          "rotation": [0, 180, 0],
+          "scale": 15
+        }
+      ],
+      "videos": [
+        {
+          "id": "Voicemess",
+          "url": "video/1-Voicemess_compressed.mp4",
+          "position": [3, -7.0, 52.5],
+          "rotation": [0, 180, 0],
+          "size": [64, 40],
+          "triggerAt": 2
+        },
+        {
+          "id": "Death",
+          "url": "video/Death_compressed.mp4",
+          "position": [3, -7.0, 52.5],
+          "rotation": [0, 180, 0],
+          "size": [64, 40],
+          "triggerAt": 27.5
+        }
+      ],
+      "lighting": {
+        "position": [4, -3.5, 32.7],
+        "ambient": 0.3,
+        "directional": 0.4,
+        "hemisphere": 0.3
+      }
+    }
+  ],
+  "ui": {
+    "homeScreen": {
+      "backgroundImage": "images/home-page-image.jpg",
+      "backgroundImageDesktop": "images/bg_desktop.png",
+      "title": {
+        "en": "Shadows of the Stabilisation Point",
+        "fi": "Rintamaklinikan varjot"
+      },
+      "subtitle": {
+        "en": "An immersive documentary experience",
+        "fi": "Immersiivinen dokumenttikokemus"
+      },
+      "startButtonText": {
+        "en": "Start Experience",
+        "fi": "Aloita kokemus"
+      }
+    },
+    "branding": {
+      "logo": "logos/Yle-logo_RGB_valkoinen.png",
+      "primaryColor": "#ffffff",
+      "font": "YleNext",
+      "fontFiles": {
+        "woff2": "fonts/YleNext-Regular.woff2",
+        "woff": "fonts/YleNext-Regular.woff"
+      }
+    },
+    "controls": {
+      "showRecenter": true,
+      "showSkip": true,
+      "showSettings": true
+    }
+  },
+  "ending": {
+    "video": "video/OlenaEnd.mp4",
+    "text": {
+      "en": "Thank you for experiencing this story",
+      "fi": "Kiitos kokemuksesta"
+    },
+    "credits": [
+      { "role": { "en": "Producer", "fi": "Tuottaja" }, "name": "Yle" },
+      { "role": { "en": "Development", "fi": "Kehitys" }, "name": "Metropolia UAS / HXRC" },
+      { "role": { "en": "Lead Developer", "fi": "Pääkehittäjä" }, "name": "Narmeen Marji" }
+    ]
+  }
+}

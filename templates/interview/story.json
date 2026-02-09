@@ -1,0 +1,147 @@
+{
+  "project": {
+    "title": "Interview Template",
+    "version": "1.0",
+    "languages": ["en"],
+    "defaultLanguage": "en",
+    "modes": ["ar", "3d"],
+    "assets": {
+      "basePath": "./assets/",
+      "environment": "models/environment.glb",
+      "preload": [
+        "models/interviewer.glb",
+        "audio/interview.mp3"
+      ]
+    }
+  },
+  "scenes": [
+    {
+      "id": "intro",
+      "name": "Introduction",
+      "audio": {
+        "url": "audio/intro_narration.mp3",
+        "volume": 0.5,
+        "autoplay": true,
+        "delay": 1000
+      },
+      "characters": [
+        {
+          "id": "interviewer",
+          "model": "models/interviewer.glb",
+          "position": [0, -10, -5],
+          "scale": 5,
+          "rotation": [0, 0, 0],
+          "animation": "Idle"
+        }
+      ],
+      "videos": [
+        {
+          "id": "intro-video",
+          "url": "video/introduction.mp4",
+          "position": [-10, 0, 0],
+          "rotation": [0, 90, 0],
+          "size": [40, 22.5],
+          "triggerAt": 2
+        }
+      ],
+      "lighting": {
+        "ambient": 0.8,
+        "directional": 1,
+        "hemisphere": 0.6
+      },
+      "nextScene": "interview"
+    },
+    {
+      "id": "interview",
+      "name": "Main Interview",
+      "audio": {
+        "url": "audio/interview.mp3",
+        "volume": 0.5,
+        "autoplay": true
+      },
+      "characters": [
+        {
+          "id": "subject",
+          "model": "models/interview_subject.glb",
+          "position": [0, -10, 0],
+          "scale": 5,
+          "rotation": [0, 0, 0],
+          "animation": "Talking"
+        }
+      ],
+      "videos": [
+        {
+          "id": "broll-1",
+          "url": "video/broll_1.mp4",
+          "position": [-10, 0, 5],
+          "rotation": [0, 90, 0],
+          "size": [40, 22.5],
+          "triggerAt": 30
+        },
+        {
+          "id": "broll-2",
+          "url": "video/broll_2.mp4",
+          "position": [-10, 0, 5],
+          "rotation": [0, 90, 0],
+          "size": [40, 22.5],
+          "triggerAt": 90
+        }
+      ],
+      "lighting": {
+        "ambient": 0.6,
+        "directional": 0.8,
+        "hemisphere": 0.5
+      },
+      "nextScene": "conclusion"
+    },
+    {
+      "id": "conclusion",
+      "name": "Conclusion",
+      "audio": {
+        "url": "audio/conclusion.mp3",
+        "volume": 0.5,
+        "autoplay": true
+      },
+      "videos": [
+        {
+          "id": "closing-video",
+          "url": "video/closing.mp4",
+          "position": [0, 0, -10],
+          "rotation": [0, 0, 0],
+          "size": [50, 28],
+          "triggerAt": 0.5
+        }
+      ],
+      "lighting": {
+        "ambient": 1,
+        "directional": 1,
+        "hemisphere": 1
+      }
+    }
+  ],
+  "ui": {
+    "homeScreen": {
+      "backgroundImage": "images/background.jpg",
+      "title": "Interview Title",
+      "subtitle": "A spatial journalism experience",
+      "startButtonText": "Begin"
+    },
+    "branding": {
+      "logo": "logos/logo.png",
+      "primaryColor": "#ffffff"
+    },
+    "controls": {
+      "showRecenter": true,
+      "showSkip": true,
+      "showSettings": true
+    }
+  },
+  "ending": {
+    "text": "Thank you for watching",
+    "credits": [
+      { "role": "Producer", "name": "Your Organization" },
+      { "role": "Director", "name": "Director Name" },
+      { "role": "Subject", "name": "Interview Subject" }
+    ]
+  }
+}

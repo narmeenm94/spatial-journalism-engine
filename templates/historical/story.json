@@ -1,0 +1,187 @@
+{
+  "project": {
+    "title": "Historical Reconstruction Template",
+    "version": "1.0",
+    "languages": ["en"],
+    "defaultLanguage": "en",
+    "modes": ["ar", "3d", "exploration"],
+    "assets": {
+      "basePath": "./assets/",
+      "environment": "models/historical_site.glb",
+      "preload": [
+        "audio/narration.mp3",
+        "video/archival_1.mp4"
+      ]
+    }
+  },
+  "scenes": [
+    {
+      "id": "era1",
+      "name": "1920s - The Beginning",
+      "audio": {
+        "url": "audio/era1_narration.mp3",
+        "volume": 0.5,
+        "autoplay": true,
+        "positional": true,
+        "position": [0, 0, 0],
+        "refDistance": 10,
+        "maxDistance": 30
+      },
+      "videos": [
+        {
+          "id": "archival-1920s",
+          "url": "video/archival_1920s.mp4",
+          "position": [-8, 2, 0],
+          "rotation": [0, 90, 0],
+          "size": [30, 22],
+          "opacity": 0.85,
+          "triggerAt": 3
+        }
+      ],
+      "objects": [
+        {
+          "id": "artifact_1",
+          "model": "models/artifact_1920s.glb",
+          "position": [2, 0, -3],
+          "scale": 1,
+          "rotation": [0, 45, 0]
+        }
+      ],
+      "lighting": {
+        "ambient": 0.4,
+        "directional": 0.6,
+        "hemisphere": 0.3
+      },
+      "nextScene": "era2"
+    },
+    {
+      "id": "era2",
+      "name": "1940s - The Conflict",
+      "audio": {
+        "url": "audio/era2_narration.mp3",
+        "volume": 0.5,
+        "autoplay": true,
+        "positional": true,
+        "position": [5, 0, 5],
+        "waypoints": [
+          { "time": 0, "position": [5, 0, 5] },
+          { "time": 30, "position": [-5, 0, 5] },
+          { "time": 60, "position": [-5, 0, -5] },
+          { "time": 90, "position": [5, 0, -5] }
+        ]
+      },
+      "videos": [
+        {
+          "id": "archival-1940s-a",
+          "url": "video/archival_1940s_a.mp4",
+          "position": [-8, 2, 5],
+          "rotation": [0, 90, 0],
+          "size": [30, 22],
+          "triggerAt": 5
+        },
+        {
+          "id": "archival-1940s-b",
+          "url": "video/archival_1940s_b.mp4",
+          "position": [8, 2, 0],
+          "rotation": [0, -90, 0],
+          "size": [30, 22],
+          "triggerAt": 45
+        }
+      ],
+      "objects": [
+        {
+          "id": "artifact_2",
+          "model": "models/artifact_1940s.glb",
+          "position": [0, 0, 0],
+          "scale": 1.5
+        }
+      ],
+      "lighting": {
+        "ambient": 0.3,
+        "directional": 0.5,
+        "hemisphere": 0.2,
+        "flicker": true
+      },
+      "nextScene": "era3"
+    },
+    {
+      "id": "era3",
+      "name": "1960s - The Change",
+      "audio": {
+        "url": "audio/era3_narration.mp3",
+        "volume": 0.5,
+        "autoplay": true
+      },
+      "videos": [
+        {
+          "id": "archival-1960s",
+          "url": "video/archival_1960s.mp4",
+          "position": [0, 2, -8],
+          "rotation": [0, 0, 0],
+          "size": [40, 30],
+          "triggerAt": 2
+        }
+      ],
+      "lighting": {
+        "ambient": 0.6,
+        "directional": 0.8,
+        "hemisphere": 0.5
+      },
+      "nextScene": "present"
+    },
+    {
+      "id": "present",
+      "name": "Today - Reflection",
+      "audio": {
+        "url": "audio/present_narration.mp3",
+        "volume": 0.5,
+        "autoplay": true
+      },
+      "videos": [
+        {
+          "id": "modern-footage",
+          "url": "video/modern_footage.mp4",
+          "multiWall": true,
+          "walls": [
+            { "position": [-8, 2, 0], "rotation": [0, 90, 0] },
+            { "position": [8, 2, 0], "rotation": [0, -90, 0] },
+            { "position": [0, 2, 8], "rotation": [0, 180, 0] }
+          ],
+          "size": [25, 18],
+          "triggerAt": 5
+        }
+      ],
+      "lighting": {
+        "ambient": 1,
+        "directional": 1,
+        "hemisphere": 1
+      }
+    }
+  ],
+  "ui": {
+    "homeScreen": {
+      "backgroundImage": "images/historical_bg.jpg",
+      "title": "A Journey Through Time",
+      "subtitle": "Experience history in spatial reality",
+      "startButtonText": "Begin Journey"
+    },
+    "branding": {
+      "logo": "logos/archive_logo.png",
+      "primaryColor": "#d4af37"
+    },
+    "controls": {
+      "showRecenter": true,
+      "showSkip": true,
+      "showSettings": true
+    }
+  },
+  "ending": {
+    "text": "History shapes our present. Understanding the past helps us build a better future.",
+    "credits": [
+      { "role": "Historical Research", "name": "Research Team" },
+      { "role": "Archive Material", "name": "National Archives" },
+      { "role": "Narration", "name": "Narrator Name" },
+      { "role": "Production", "name": "Your Organization" }
+    ]
+  }
+}

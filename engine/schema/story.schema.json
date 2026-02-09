@@ -1,0 +1,452 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://yle.fi/spatial-journalism/story.schema.json",
+  "title": "Spatial Journalism Story",
+  "description": "Schema for defining immersive WebAR journalism experiences",
+  "type": "object",
+  "required": ["project", "scenes"],
+  "properties": {
+    "project": {
+      "type": "object",
+      "description": "Project-level configuration",
+      "required": ["title", "assets"],
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "The title of the story"
+        },
+        "version": {
+          "type": "string",
+          "description": "Story format version",
+          "default": "1.0"
+        },
+        "languages": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Supported language codes",
+          "default": ["en"]
+        },
+        "defaultLanguage": {
+          "type": "string",
+          "description": "Default language code",
+          "default": "en"
+        },
+        "assets": {
+          "type": "object",
+          "required": ["environment"],
+          "properties": {
+            "basePath": {
+              "type": "string",
+              "description": "Base path for all assets",
+              "default": "./assets/"
+            },
+            "environment": {
+              "type": "string",
+              "description": "Path to the 3D environment model (GLB/GLTF)"
+            },
+            "preload": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Assets to preload before starting"
+            }
+          }
+        },
+        "modes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["ar", "3d", "guided", "exploration"]
+          },
+          "description": "Available experience modes",
+          "default": ["ar", "3d"]
+        }
+      }
+    },
+    "scenes": {
+      "type": "array",
+      "description": "Array of scene configurations",
+      "items": {
+        "$ref": "#/definitions/scene"
+      },
+      "minItems": 1
+    },
+    "ui": {
+      "type": "object",
+      "description": "UI configuration",
+      "properties": {
+        "homeScreen": {
+          "type": "object",
+          "properties": {
+            "backgroundImage": {
+              "type": "string",
+              "description": "Path to background image"
+            },
+            "backgroundImageDesktop": {
+              "type": "string",
+              "description": "Path to desktop background image"
+            },
+            "title": {
+              "$ref": "#/definitions/localizedString"
+            },
+            "subtitle": {
+              "$ref": "#/definitions/localizedString"
+            },
+            "startButtonText": {
+              "$ref": "#/definitions/localizedString"
+            }
+          }
+        },
+        "branding": {
+          "type": "object",
+          "properties": {
+            "logo": {
+              "type": "string",
+              "description": "Path to logo image"
+            },
+            "primaryColor": {
+              "type": "string",
+              "description": "Primary brand color (hex)"
+            },
+            "font": {
+              "type": "string",
+              "description": "Custom font family name"
+            },
+            "fontFiles": {
+              "type": "object",
+              "properties": {
+                "woff2": { "type": "string" },
+                "woff": { "type": "string" }
+              }
+            }
+          }
+        },
+        "controls": {
+          "type": "object",
+          "properties": {
+            "showRecenter": {
+              "type": "boolean",
+              "default": true
+            },
+            "showSkip": {
+              "type": "boolean",
+              "default": true
+            },
+            "showSettings": {
+              "type": "boolean",
+              "default": true
+            }
+          }
+        }
+      }
+    },
+    "ending": {
+      "type": "object",
+      "description": "Ending sequence configuration",
+      "properties": {
+        "video": {
+          "type": "string",
+          "description": "Path to ending video"
+        },
+        "text": {
+          "$ref": "#/definitions/localizedString"
+        },
+        "credits": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "role": { "$ref": "#/definitions/localizedString" },
+              "name": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "localizedString": {
+      "oneOf": [
+        { "type": "string" },
+        {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      ],
+      "description": "A string or object with language codes as keys"
+    },
+    "vector3": {
+      "type": "array",
+      "items": { "type": "number" },
+      "minItems": 3,
+      "maxItems": 3,
+      "description": "3D vector as [x, y, z]"
+    },
+    "scene": {
+      "type": "object",
+      "required": ["id", "name"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique scene identifier"
+        },
+        "name": {
+          "$ref": "#/definitions/localizedString",
+          "description": "Scene display name"
+        },
+        "audio": {
+          "$ref": "#/definitions/audioConfig"
+        },
+        "characters": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/character" }
+        },
+        "objects": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/object3d" }
+        },
+        "videos": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/video" }
+        },
+        "lighting": {
+          "$ref": "#/definitions/lighting"
+        },
+        "duration": {
+          "type": "number",
+          "description": "Scene duration in seconds (optional, auto-calculated from audio)"
+        },
+        "nextScene": {
+          "type": "string",
+          "description": "ID of the next scene (for linear progression)"
+        }
+      }
+    },
+    "audioConfig": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "description": "Path to audio file"
+        },
+        "volume": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.5
+        },
+        "loop": {
+          "type": "boolean",
+          "default": false
+        },
+        "autoplay": {
+          "type": "boolean",
+          "default": true
+        },
+        "delay": {
+          "type": "number",
+          "description": "Delay before playing in milliseconds",
+          "default": 0
+        },
+        "positional": {
+          "type": "boolean",
+          "description": "Enable positional/spatial audio",
+          "default": false
+        },
+        "position": {
+          "$ref": "#/definitions/vector3",
+          "description": "Position for positional audio"
+        },
+        "refDistance": {
+          "type": "number",
+          "default": 15
+        },
+        "maxDistance": {
+          "type": "number",
+          "default": 50
+        },
+        "waypoints": {
+          "type": "array",
+          "description": "Audio position waypoints for moving sound",
+          "items": {
+            "type": "object",
+            "properties": {
+              "time": { "type": "number" },
+              "position": { "$ref": "#/definitions/vector3" }
+            }
+          }
+        }
+      }
+    },
+    "character": {
+      "type": "object",
+      "required": ["model"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique character identifier"
+        },
+        "model": {
+          "type": "string",
+          "description": "Path to character model (GLB)"
+        },
+        "position": {
+          "$ref": "#/definitions/vector3"
+        },
+        "scale": {
+          "oneOf": [
+            { "type": "number" },
+            { "$ref": "#/definitions/vector3" }
+          ],
+          "default": 1
+        },
+        "rotation": {
+          "$ref": "#/definitions/vector3",
+          "description": "Rotation in degrees [x, y, z]"
+        },
+        "animation": {
+          "type": "string",
+          "description": "Name of animation to play"
+        },
+        "delay": {
+          "type": "number",
+          "description": "Delay before character appears (ms)",
+          "default": 0
+        },
+        "opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.7
+        }
+      }
+    },
+    "object3d": {
+      "type": "object",
+      "required": ["model"],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string",
+          "description": "Path to object model (GLB)"
+        },
+        "position": {
+          "$ref": "#/definitions/vector3"
+        },
+        "scale": {
+          "oneOf": [
+            { "type": "number" },
+            { "$ref": "#/definitions/vector3" }
+          ],
+          "default": 1
+        },
+        "rotation": {
+          "$ref": "#/definitions/vector3"
+        },
+        "animation": {
+          "type": "string"
+        }
+      }
+    },
+    "video": {
+      "type": "object",
+      "required": ["id", "url"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique video identifier"
+        },
+        "url": {
+          "type": "string",
+          "description": "Path to video file"
+        },
+        "position": {
+          "$ref": "#/definitions/vector3"
+        },
+        "rotation": {
+          "$ref": "#/definitions/vector3",
+          "description": "Rotation in degrees"
+        },
+        "size": {
+          "type": "array",
+          "items": { "type": "number" },
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "Video plane size [width, height]"
+        },
+        "opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.9
+        },
+        "loop": {
+          "type": "boolean",
+          "default": false
+        },
+        "muted": {
+          "type": "boolean",
+          "default": true
+        },
+        "triggerAt": {
+          "type": "number",
+          "description": "Audio timestamp (seconds) to trigger video"
+        },
+        "multiWall": {
+          "type": "boolean",
+          "description": "Display on multiple walls simultaneously"
+        },
+        "walls": {
+          "type": "array",
+          "description": "Wall positions for multi-wall display",
+          "items": {
+            "type": "object",
+            "properties": {
+              "position": { "$ref": "#/definitions/vector3" },
+              "rotation": { "$ref": "#/definitions/vector3" }
+            }
+          }
+        }
+      }
+    },
+    "lighting": {
+      "type": "object",
+      "properties": {
+        "position": {
+          "$ref": "#/definitions/vector3",
+          "description": "Focal point for lighting"
+        },
+        "ambient": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2,
+          "description": "Ambient light intensity multiplier",
+          "default": 1
+        },
+        "directional": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2,
+          "description": "Directional light intensity multiplier",
+          "default": 1
+        },
+        "hemisphere": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2,
+          "description": "Hemisphere light intensity multiplier",
+          "default": 1
+        },
+        "volumetric": {
+          "type": "boolean",
+          "description": "Enable volumetric lighting effects"
+        },
+        "flicker": {
+          "type": "boolean",
+          "description": "Enable flickering light effect"
+        }
+      }
+    }
+  }
+}
