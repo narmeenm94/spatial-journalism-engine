@@ -1,0 +1,47 @@
+{
+  "name": "spatial-journalism-engine",
+  "version": "1.0.0",
+  "description": "JSON-driven spatial journalism platform for creating immersive WebAR experiences",
+  "main": "engine/src/index.js",
+  "scripts": {
+    "build": "webpack --config engine/webpack.config.js",
+    "build:prod": "webpack --config engine/webpack.config.js --mode production",
+    "dev": "webpack serve --config engine/webpack.config.js",
+    "generator": "npx serve generator -p 3001",
+    "test": "jest",
+    "lint": "eslint engine/src/**/*.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yle/spatial-journalism-engine.git"
+  },
+  "keywords": [
+    "spatial-journalism",
+    "webAR",
+    "8thwall",
+    "three.js",
+    "immersive",
+    "journalism",
+    "storytelling"
+  ],
+  "author": "Yle / Narmeen Marji",
+  "license": "MIT",
+  "dependencies": {
+    "ajv": "^8.12.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.23.0",
+    "@babel/preset-env": "^7.23.0",
+    "babel-loader": "^9.1.3",
+    "copy-webpack-plugin": "^11.0.0",
+    "css-loader": "^6.8.1",
+    "html-webpack-plugin": "^5.5.3",
+    "style-loader": "^3.3.3",
+    "webpack": "^5.88.0",
+    "webpack-cli": "^5.1.4",
+    "webpack-dev-server": "^4.15.1"
+  },
+  "peerDependencies": {
+    "three": ">=0.150.0"
+  }
+}
