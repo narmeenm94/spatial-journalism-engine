@@ -10,6 +10,7 @@ export class JSONParser {
     this.ajv = new Ajv({ allErrors: true, verbose: true })
     this.schema = null
     this.validator = null
+    this.storyBaseUrl = '' // Base URL for resolving relative asset paths
   }
 
   /**
@@ -62,12 +63,18 @@ export class JSONParser {
   /**
    * Parse and validate story JSON from URL or object
    * @param {string|object} source - Story JSON URL or object
+   * @param {object} [options] - Parse options
+   * @param {boolean} [options.skipValidation] - Skip schema validation (e.g. for Creator preview)
    * @returns {object} Parsed and validated story configuration
    */
-  async parse(source) {
+  async parse(source, options = {}) {
     let story
 
     if (typeof source === 'string') {
+      // Store the base URL from the story location for resolving relative paths
+      const url = new URL(source, window.location.href)
+      this.storyBaseUrl = url.href.substring(0, url.href.lastIndexOf('/') + 1)
+      
       const response = await fetch(source)
       if (!response.ok) {
         throw new Error(`Failed to load story: ${response.statusText}`)
@@ -75,13 +82,20 @@ export class JSONParser {
       story = await response.json()
     } else {
       story = source
+      // For object sources, use current page location (unless storyBaseUrl was set externally)
+      if (!this.storyBaseUrl) {
+        this.storyBaseUrl = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1)
+      }
     }
 
-    const validation = this.validate(story)
-    
-    if (!validation.isValid) {
-      console.error('Story validation failed:', validation.errors)
-      throw new Error(`Invalid story configuration: ${validation.errors.map(e => e.message).join(', ')}`)
+    // Skip validation when story comes from the Creator (different internal format)
+    // or when explicitly requested. The normalize step handles both formats.
+    if (!options.skipValidation && typeof source === 'string') {
+      const validation = this.validate(story)
+      if (!validation.isValid) {
+        console.error('Story validation failed:', validation.errors)
+        throw new Error(`Invalid story configuration: ${validation.errors.map(e => e.message).join(', ')}`)
+      }
     }
 
     // Apply defaults and normalize the story
@@ -140,24 +154,55 @@ export class JSONParser {
   normalizeScene(scene, index, project) {
     const basePath = project.assets.basePath
 
+    // Accept both engine format (name) and creator format (title)
+    const sceneName = scene.name || scene.title || `Scene ${index + 1}`
+
+    // Audio: accept single object or array of audio configs
+    const rawAudioArr = scene.audio
+      ? (Array.isArray(scene.audio) ? scene.audio : [scene.audio])
+      : []
+
+    // Subtitles: accept both per-language object and array-of-objects format
+    let subtitles = scene.subtitles
+    if (subtitles && !Array.isArray(subtitles) && typeof subtitles === 'object') {
+      // Already per-language object format — pass through (SceneManager handles it)
+    } else if (Array.isArray(subtitles) && subtitles.length > 0 && typeof subtitles[0].text === 'object') {
+      // Creator format: [{id, start, end, text: {en: "...", fi: "..."}}]
+      // Convert to engine's per-language format: {en: [{start, end, text}], fi: [...]}
+      const langs = project.languages || ['en']
+      const converted = {}
+      langs.forEach(lang => {
+        converted[lang] = subtitles
+          .filter(s => s.text && s.text[lang])
+          .map(s => ({ start: s.start, end: s.end, text: s.text[lang] }))
+      })
+      subtitles = converted
+    }
+
     return {
       id: scene.id || `scene${index + 1}`,
-      name: scene.name || `Scene ${index + 1}`,
+      name: sceneName,
       isActive: false,
       ...scene,
+      name: sceneName,
+      subtitles,
       
-      // Normalize audio
-      audio: scene.audio ? {
-        volume: 0.5,
-        loop: false,
-        autoplay: true,
-        delay: 0,
-        positional: false,
-        refDistance: 15,
-        maxDistance: 50,
-        ...scene.audio,
-        url: this.resolvePath(scene.audio.url, basePath)
-      } : null,
+      // Normalize audio (always an array)
+      audio: rawAudioArr.map((a, ai) => {
+        const url = a.url || a.file || ''
+        return {
+          id: a.id || `audio_${scene.id}_${ai}`,
+          volume: 0.5,
+          loop: false,
+          autoplay: true,
+          delay: 0,
+          positional: false,
+          refDistance: 15,
+          maxDistance: 50,
+          ...a,
+          url: this.resolvePath(url, basePath)
+        }
+      }),
 
       // Normalize characters
       characters: (scene.characters || []).map((char, i) => ({
@@ -181,7 +226,7 @@ export class JSONParser {
         scale: this.normalizeScale(obj.scale)
       })),
 
-      // Normalize videos
+      // Normalize videos — accept both triggerAt (engine) and triggerTime (creator)
       videos: (scene.videos || []).map((video, i) => ({
         opacity: 0.9,
         loop: false,
@@ -189,34 +234,57 @@ export class JSONParser {
         ...video,
         id: video.id || `video_${scene.id}_${i}`,
         url: this.resolvePath(video.url, basePath),
+        triggerAt: video.triggerAt ?? video.triggerTime ?? 0,
         position: this.normalizeVector3(video.position),
         rotation: this.normalizeRotation(video.rotation),
         size: video.size || [64, 40]
       })),
 
-      // Normalize lighting
-      lighting: {
-        ambient: 1,
-        directional: 1,
-        hemisphere: 1,
-        ...scene.lighting,
-        position: scene.lighting?.position ? this.normalizeVector3(scene.lighting.position) : null
-      }
+      // Normalize lighting — map creator's spotlights[] to engine format
+      lighting: this.normalizeLighting(scene.lighting)
     }
   }
 
   /**
-   * Resolve asset path relative to base path
+   * Resolve asset path relative to base path and story location
    * @param {string} path - Asset path
-   * @param {string} basePath - Base path
-   * @returns {string} Resolved path
+   * @param {string} basePath - Base path from story config
+   * @returns {string} Resolved absolute path
    */
   resolvePath(path, basePath) {
     if (!path) return path
-    if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('/')) {
+    // Don't modify absolute URLs or data/blob URLs
+    if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('blob:') || path.startsWith('data:')) {
       return path
     }
-    return `${basePath}${path}`
+
+    // Check for a local asset blob URL (set by the Creator preview via postMessage).
+    // Keys in localAssetBlobUrls match the config path, e.g. "models/file.glb"
+    if (this.localAssetBlobUrls) {
+      if (this.localAssetBlobUrls[path]) {
+        return this.localAssetBlobUrls[path]
+      }
+      // Also try with basePath stripped (e.g. "assets/models/file.glb" → "models/file.glb")
+      const combined = `${basePath || ''}${path}`
+      if (this.localAssetBlobUrls[combined]) {
+        return this.localAssetBlobUrls[combined]
+      }
+    }
+
+    // For absolute paths starting with /, return as-is
+    if (path.startsWith('/')) {
+      return path
+    }
+    // Combine basePath with path
+    const combinedPath = `${basePath}${path}`
+    // Resolve against story base URL to get absolute path
+    try {
+      const resolved = new URL(combinedPath, this.storyBaseUrl)
+      return resolved.pathname
+    } catch (e) {
+      // Fallback to combined path if URL resolution fails
+      return combinedPath
+    }
   }
 
   /**
@@ -224,6 +292,55 @@ export class JSONParser {
    * @param {array|object} vec - Vector as array or object
    * @returns {object} Vector3-compatible object
    */
+  /**
+   * Normalize scene lighting configuration.
+   * Maps creator format (spotlights array) to engine format and preserves
+   * engine-native fields (modifiers, spotlight, effects, etc.)
+   */
+  normalizeLighting(lighting) {
+    if (!lighting) return null
+
+    const result = { ...lighting }
+
+    // The creator stores scene point/spot lights as `spotlights: SpotlightConfig[]`.
+    // The engine's SceneManager already understands `spotlight` (singular) for
+    // volumetric lighting, but not additional dynamic lights.
+    // We keep both: `spotlight` for the first volumetric-capable light,
+    // and `dynamicLights` for all spotlights that should appear as real Three.js lights.
+    if (lighting.spotlights && Array.isArray(lighting.spotlights) && lighting.spotlights.length > 0) {
+      // If engine-format `spotlight` is not already set, derive it from the first creator spotlight
+      if (!result.spotlight) {
+        const first = lighting.spotlights[0]
+        result.spotlight = {
+          position: Array.isArray(first.position)
+            ? first.position
+            : [first.position?.x || 0, first.position?.y || 0, first.position?.z || 0],
+          color: first.color || '#ffffff',
+          intensity: first.intensity ?? 1,
+          volumetric: first.volumetric ?? false,
+          volumetricOffset: first.volumetricOffset || 13.5
+        }
+      }
+
+      // Store the full array so the engine can create real Three.js lights
+      result.dynamicLights = lighting.spotlights.map(s => ({
+        id: s.id || 'spot',
+        type: s.type || 'point', // 'point' | 'spot' | 'directional'
+        position: Array.isArray(s.position) ? s.position : [s.position?.x || 0, s.position?.y || 0, s.position?.z || 0],
+        target: s.target ? (Array.isArray(s.target) ? s.target : [s.target.x || 0, s.target.y || 0, s.target.z || 0]) : null,
+        color: s.color || '#ffffff',
+        intensity: s.intensity ?? 1,
+        angle: s.angle ?? 0.6,
+        penumbra: s.penumbra ?? 0.5,
+        distance: s.distance ?? 30,
+        decay: s.decay ?? 2,
+        castShadow: s.castShadow ?? false
+      }))
+    }
+
+    return result
+  }
+
   normalizeVector3(vec) {
     if (!vec) return { x: 0, y: 0, z: 0 }
     if (Array.isArray(vec)) {
@@ -233,17 +350,16 @@ export class JSONParser {
   }
 
   /**
-   * Normalize rotation from degrees to radians
-   * @param {array|object} rot - Rotation in degrees
-   * @returns {object} Rotation in radians
+   * Normalize rotation (values already in radians)
+   * @param {array|object} rot - Rotation in radians
+   * @returns {object} Rotation object {x, y, z}
    */
   normalizeRotation(rot) {
     if (!rot) return { x: 0, y: 0, z: 0 }
-    const toRad = (deg) => (deg * Math.PI) / 180
     if (Array.isArray(rot)) {
-      return { x: toRad(rot[0] || 0), y: toRad(rot[1] || 0), z: toRad(rot[2] || 0) }
+      return { x: rot[0] || 0, y: rot[1] || 0, z: rot[2] || 0 }
     }
-    return { x: toRad(rot.x || 0), y: toRad(rot.y || 0), z: toRad(rot.z || 0) }
+    return { x: rot.x || 0, y: rot.y || 0, z: rot.z || 0 }
   }
 
   /**

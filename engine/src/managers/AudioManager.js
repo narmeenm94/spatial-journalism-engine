@@ -18,6 +18,10 @@ export class AudioManager {
     this.positionUpdateCallbacks = new Map()
     this.timeUpdateCallbacks = new Map()
     
+    // Manual time tracking (more reliable than Three.js internals)
+    this.playStartTimes = new Map() // audioId -> performance.now() when play started
+    this.timeTrackingActive = new Map() // audioId -> boolean
+    
     this.initListener()
   }
 
@@ -37,28 +41,6 @@ export class AudioManager {
   }
 
   /**
-   * Load audio from configuration
-   * @param {object} config - Audio configuration from JSON
-   * @returns {Promise<THREE.Audio>} Loaded audio object
-   */
-  async loadFromConfig(config) {
-    if (!config || !config.url) return null
-    
-    return this.loadAudio(config.id || 'main', {
-      url: config.url,
-      volume: config.volume,
-      loop: config.loop,
-      autoplay: config.autoplay,
-      delay: config.delay,
-      positional: config.positional,
-      position: config.position,
-      refDistance: config.refDistance,
-      maxDistance: config.maxDistance,
-      waypoints: config.waypoints
-    })
-  }
-
-  /**
    * Load and create audio
    * @param {string} audioId - Unique audio identifier
    * @param {object} options - Audio options
@@ -69,8 +51,6 @@ export class AudioManager {
       url,
       volume = 0.5,
       loop = false,
-      autoplay = false,
-      delay = 0,
       onEnded = null,
       positional = false,
       position = null,
@@ -83,8 +63,12 @@ export class AudioManager {
 
     return new Promise((resolve, reject) => {
       if (!this.listener) {
-        reject(new Error('AudioListener not initialized'))
-        return
+        console.warn('AudioListener not initialized, attempting to initialize...')
+        this.initListener()
+        if (!this.listener) {
+          reject(new Error('AudioListener not initialized'))
+          return
+        }
       }
 
       // Create positional or regular audio
@@ -108,12 +92,15 @@ export class AudioManager {
             sound.setRolloffFactor(rolloffFactor)
             
             if (position) {
-              sound.position.set(position.x, position.y, position.z)
+              const pos = Array.isArray(position)
+                ? { x: position[0], y: position[1], z: position[2] }
+                : position
+              sound.position.set(pos.x, pos.y, pos.z)
             }
           }
 
           // Store waypoints for position updates
-          if (waypoints.length > 0) {
+          if (waypoints && waypoints.length > 0) {
             sound.userData = { waypoints, currentWaypointIndex: 0 }
           }
 
@@ -128,53 +115,76 @@ export class AudioManager {
           }
 
           sound.onEnded = () => {
+            console.log(`Audio ended: ${audioId}`)
+            this.timeTrackingActive.set(audioId, false)
             const callback = this.audioEndCallbacks.get(audioId)
             if (callback) callback()
           }
 
           this.sounds.set(audioId, sound)
-
-          // Auto-play with optional delay
-          if (autoplay) {
-            if (delay > 0) {
-              setTimeout(() => {
-                if (sound.buffer && !sound.isPlaying) {
-                  sound.play()
-                  this.startTimeTracking(audioId)
-                }
-              }, delay)
-            } else {
-              sound.play()
-              this.startTimeTracking(audioId)
-            }
-          }
+          console.log(`Audio loaded: ${audioId}, duration: ${buffer.duration}s`)
 
           resolve(sound)
         },
-        undefined,
+        (progress) => {
+          // Loading progress
+        },
         (error) => {
-          reject(new Error(`Failed to load audio ${audioId}: ${error.message}`))
+          console.error(`Failed to load audio ${audioId} from ${url}:`, error)
+          reject(new Error(`Failed to load audio ${audioId}: ${error?.message || 'Unknown error'}`))
         }
       )
     })
   }
 
   /**
-   * Start time tracking for audio
+   * Play audio by ID
+   * @param {string} audioId - Audio identifier
+   */
+  play(audioId) {
+    const sound = this.sounds.get(audioId)
+    if (sound && !sound.isPlaying) {
+      try {
+        sound.play()
+        this.currentAudio = audioId
+        // Record the actual time when playback started
+        this.playStartTimes.set(audioId, performance.now())
+        this.startTimeTracking(audioId)
+        console.log(`Audio playing: ${audioId}`)
+      } catch (error) {
+        console.error(`Error playing audio ${audioId}:`, error)
+      }
+    }
+  }
+
+  /**
+   * Start time tracking for audio using performance.now()
    * @param {string} audioId - Audio identifier
    */
   startTimeTracking(audioId) {
     const sound = this.sounds.get(audioId)
     if (!sound) return
 
-    const trackTime = () => {
-      if (!sound.isPlaying) return
+    this.timeTrackingActive.set(audioId, true)
 
-      const currentTime = sound.context.currentTime - sound.startTime
+    const trackTime = () => {
+      if (!this.timeTrackingActive.get(audioId)) return
+      if (!sound.isPlaying) {
+        // Audio stopped externally
+        return
+      }
+
+      // Calculate current time using performance.now() for reliability
+      const startTime = this.playStartTimes.get(audioId)
+      if (startTime === undefined) return
+
+      const currentTime = (performance.now() - startTime) / 1000 // Convert to seconds
       
       // Call time update callback
       const callback = this.timeUpdateCallbacks.get(audioId)
-      if (callback) callback(currentTime)
+      if (callback) {
+        callback(currentTime)
+      }
 
       // Update positional audio based on waypoints
       if (sound.userData?.waypoints) {
@@ -207,30 +217,19 @@ export class AudioManager {
         if (next) {
           // Interpolate between waypoints
           const progress = (currentTime - current.time) / (next.time - current.time)
+          const clampedProgress = Math.min(Math.max(progress, 0), 1)
           const pos = {
-            x: current.position.x + (next.position.x - current.position.x) * progress,
-            y: current.position.y + (next.position.y - current.position.y) * progress,
-            z: current.position.z + (next.position.z - current.position.z) * progress
+            x: current.position.x + (next.position.x - current.position.x) * clampedProgress,
+            y: current.position.y + (next.position.y - current.position.y) * clampedProgress,
+            z: current.position.z + (next.position.z - current.position.z) * clampedProgress
           }
           sound.position.set(pos.x, pos.y, pos.z)
         } else {
-          sound.position.set(current.position.x, current.position.y, current.position.z)
+          const pos = current.position
+          sound.position.set(pos.x, pos.y, pos.z)
         }
         break
       }
-    }
-  }
-
-  /**
-   * Play audio by ID
-   * @param {string} audioId - Audio identifier
-   */
-  play(audioId) {
-    const sound = this.sounds.get(audioId)
-    if (sound && !sound.isPlaying) {
-      sound.play()
-      this.currentAudio = audioId
-      this.startTimeTracking(audioId)
     }
   }
 
@@ -242,6 +241,7 @@ export class AudioManager {
     const sound = this.sounds.get(audioId)
     if (sound && sound.isPlaying) {
       sound.pause()
+      this.timeTrackingActive.set(audioId, false)
     }
   }
 
@@ -252,7 +252,10 @@ export class AudioManager {
   stop(audioId) {
     const sound = this.sounds.get(audioId)
     if (sound) {
-      sound.stop()
+      if (sound.isPlaying) {
+        sound.stop()
+      }
+      this.timeTrackingActive.set(audioId, false)
     }
   }
 
@@ -272,9 +275,9 @@ export class AudioManager {
    * @returns {number} Current time in seconds
    */
   getCurrentTime(audioId) {
-    const sound = this.sounds.get(audioId)
-    if (sound && sound.isPlaying) {
-      return sound.context.currentTime - sound.startTime
+    const startTime = this.playStartTimes.get(audioId)
+    if (startTime !== undefined) {
+      return (performance.now() - startTime) / 1000
     }
     return 0
   }
@@ -292,6 +295,18 @@ export class AudioManager {
   }
 
   /**
+   * Set position for positional audio
+   * @param {string} audioId - Audio identifier
+   * @param {THREE.Vector3} position - Position
+   */
+  setPosition(audioId, position) {
+    const sound = this.sounds.get(audioId)
+    if (sound) {
+      sound.position.set(position.x, position.y, position.z)
+    }
+  }
+
+  /**
    * Fade out audio
    * @param {string} audioId - Audio identifier
    * @param {number} duration - Fade duration in ms
@@ -300,7 +315,7 @@ export class AudioManager {
   fadeOut(audioId, duration = 1000) {
     return new Promise((resolve) => {
       const sound = this.sounds.get(audioId)
-      if (!sound) {
+      if (!sound || !sound.isPlaying) {
         resolve()
         return
       }
@@ -317,6 +332,7 @@ export class AudioManager {
           requestAnimationFrame(fade)
         } else {
           sound.stop()
+          this.timeTrackingActive.set(audioId, false)
           resolve()
         }
       }
@@ -337,6 +353,8 @@ export class AudioManager {
       this.sounds.delete(audioId)
       this.audioEndCallbacks.delete(audioId)
       this.timeUpdateCallbacks.delete(audioId)
+      this.playStartTimes.delete(audioId)
+      this.timeTrackingActive.delete(audioId)
     }
   }
 
@@ -350,6 +368,8 @@ export class AudioManager {
     this.sounds.clear()
     this.audioEndCallbacks.clear()
     this.timeUpdateCallbacks.clear()
+    this.playStartTimes.clear()
+    this.timeTrackingActive.clear()
   }
 }
 

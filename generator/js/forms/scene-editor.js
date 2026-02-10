@@ -378,12 +378,16 @@ export class SceneEditor {
     })
     
     // Light ranges
-    ['ambient', 'directional', 'hemisphere'].forEach(type => {
-      const range = document.getElementById(`light-${type}`)
-      range?.addEventListener('input', () => {
-        range.nextElementSibling.textContent = range.value
-      })
-    })
+    const lightTypes = ['ambient', 'directional', 'hemisphere']
+    for (let i = 0; i < lightTypes.length; i++) {
+      const type = lightTypes[i]
+      const range = document.getElementById('light-' + type)
+      if (range) {
+        range.addEventListener('input', () => {
+          range.nextElementSibling.textContent = range.value
+        })
+      }
+    }
     
     // Add character
     document.getElementById('btn-add-character')?.addEventListener('click', () => {

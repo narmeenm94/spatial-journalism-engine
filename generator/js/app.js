@@ -9,22 +9,26 @@ import { SceneEditor } from './forms/scene-editor.js'
 class Generator {
   constructor() {
     this.story = new StoryData()
-    this.sceneEditor = new SceneEditor(this)
-    
-    this.init()
+    this.sceneEditor = null
   }
 
   init() {
-    this.bindNavigation()
-    this.bindProjectForm()
-    this.bindUIForm()
-    this.bindEndingForm()
-    this.bindImportExport()
-    this.bindPreview()
-    this.bindScenes()
-    
-    this.updateLocalizedInputs()
-    this.updatePreview()
+    try {
+      this.sceneEditor = new SceneEditor(this)
+      this.bindNavigation()
+      this.bindProjectForm()
+      this.bindUIForm()
+      this.bindEndingForm()
+      this.bindImportExport()
+      this.bindPreview()
+      this.bindScenes()
+      
+      this.updateLocalizedInputs()
+      this.updatePreview()
+      console.log('Generator initialized successfully')
+    } catch (error) {
+      console.error('Generator init error:', error)
+    }
   }
 
   // Navigation
@@ -93,14 +97,16 @@ class Generator {
     })
     
     // Mode checkboxes
-    ['ar', '3d', 'guided', 'exploration'].forEach(mode => {
-      const checkbox = document.getElementById(`mode-${mode}`)
+    const modes = ['ar', '3d', 'guided', 'exploration']
+    for (let i = 0; i < modes.length; i++) {
+      const mode = modes[i]
+      const checkbox = document.getElementById('mode-' + mode)
       if (checkbox) {
         checkbox.addEventListener('change', () => {
           this.updateModes()
         })
       }
-    })
+    }
   }
 
   addLanguage(lang) {
@@ -205,12 +211,17 @@ class Generator {
     })
     
     // Controls
-    ['recenter', 'skip', 'settings'].forEach(ctrl => {
-      const checkbox = document.getElementById(`ctrl-${ctrl}`)
-      checkbox?.addEventListener('change', () => {
-        this.story.ui.controls[`show${ctrl.charAt(0).toUpperCase() + ctrl.slice(1)}`] = checkbox.checked
-      })
-    })
+    const ctrlNames = ['recenter', 'skip', 'settings']
+    for (let i = 0; i < ctrlNames.length; i++) {
+      const ctrl = ctrlNames[i]
+      const checkbox = document.getElementById('ctrl-' + ctrl)
+      if (checkbox) {
+        checkbox.addEventListener('change', () => {
+          const key = 'show' + ctrl.charAt(0).toUpperCase() + ctrl.slice(1)
+          this.story.ui.controls[key] = checkbox.checked
+        })
+      }
+    }
   }
 
   // Ending Form
@@ -535,5 +546,14 @@ class Generator {
   }
 }
 
-// Initialize
-const app = new Generator()
+// Initialize when DOM is ready
+let app = null
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    app = new Generator()
+    app.init()
+  })
+} else {
+  app = new Generator()
+  app.init()
+}

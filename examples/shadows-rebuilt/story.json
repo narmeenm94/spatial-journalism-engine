@@ -1,30 +1,98 @@
 {
   "project": {
     "title": "Shadows of the Stabilisation Point",
-    "version": "1.0",
+    "version": "2.0",
     "languages": ["en", "fi"],
-    "defaultLanguage": "fi",
+    "defaultLanguage": "en",
     "modes": ["ar", "3d"],
     "assets": {
-      "basePath": "./assets/",
+      "basePath": "assets/",
       "environment": "models/room_text_resize.glb",
       "preload": [
         "models/Olena_animations.glb",
         "models/Oleh_animations.glb",
         "models/chair.glb",
-        "audio/Scene_1.mp3",
-        "video/Intro_FIN.mp4",
-        "video/Intro_EN.mp4"
+        "models/photoframe.glb",
+        "models/defibrillator.glb",
+        "models/adrenaline.glb",
+        "models/bodychart.glb",
+        "models/heater.glb",
+        "models/medicine_bottle.glb",
+        "models/scissors.glb"
       ]
+    }
+  },
+  "environment": {
+    "scale": 0.07,
+    "position": [0, 2, -1.5]
+  },
+  "camera": {
+    "initialPosition": [1.5, 1.6, -1.5],
+    "initialRotation": [0, 1.5708, 0],
+    "moveSpeed": 0.005,
+    "rotateSpeed": 0.003,
+    "bounds": {
+      "minX": -1.5,
+      "maxX": 2.5,
+      "minY": -0.25,
+      "maxY": 2.5,
+      "minZ": -2.5,
+      "maxZ": 2.5
+    },
+    "buffer": 0.5,
+    "recenterPosition": [2, 0, -1.5],
+    "recenterRotation": [0, 1.5708, 0]
+  },
+  "lighting": {
+    "ambient": {
+      "color": "0x404040",
+      "intensity": 0.5
+    },
+    "directional": {
+      "color": "0x404040",
+      "intensity": 1,
+      "position": [1, 1, 1]
+    },
+    "hemisphere": {
+      "skyColor": "0xffffff",
+      "groundColor": "0xffffff",
+      "intensity": 0.1
+    }
+  },
+  "rendering": {
+    "toneMapping": "ACESFilmic",
+    "toneMappingExposure": 1.4,
+    "fog": {
+      "type": "exponential",
+      "color": "0xcccccc",
+      "density": 0.15
+    }
+  },
+  "particles": {
+    "count": 2000,
+    "color": "0xcccccc",
+    "size": 0.005,
+    "opacity": 0.3,
+    "blending": "additive",
+    "area": {
+      "width": 4,
+      "height": 1.5,
+      "depth": 4,
+      "offsetX": 0,
+      "offsetY": 0,
+      "offsetZ": 0
+    },
+    "animation": {
+      "rotationSpeed": 0.0001,
+      "driftSpeed": 0.0005,
+      "resetHeight": 3,
+      "resetToHeight": 1
     }
   },
   "scenes": [
     {
       "id": "scene1",
-      "name": {
-        "en": "Introduction",
-        "fi": "Johdanto"
-      },
+      "name": { "en": "Introduction", "fi": "Johdanto" },
       "audio": {
         "url": "audio/Scene_1.mp3",
         "volume": 0.5,
@@ -32,14 +100,36 @@
         "autoplay": true,
         "delay": 1000
       },
+      "subtitles": {
+        "en": [
+          {"start": 0, "end": 4, "text": "My name is Olena. I'm the senior nurse at the stabilisation point."},
+          {"start": 5, "end": 8, "text": "This stabilisation point is the first place"},
+          {"start": 8, "end": 12, "text": "where wounded soldiers are brought straight from the front"},
+          {"start": 12, "end": 15, "text": "to receive medical aid."},
+          {"start": 15, "end": 21, "text": "At first, they may have been treated by a combat medic or a paramedic during evacuation."},
+          {"start": 21, "end": 23, "text": "But here, there are actual doctors present."},
+          {"start": 23, "end": 26, "text": "Here, medical help is provided"},
+          {"start": 26, "end": 29, "text": "to fully stabilise the patients as much as possible."}
+        ],
+        "fi": [
+          {"start": 0, "end": 4, "text": "Nimeni on Olena. Olen sairaanhoitajana ensihoitoklinikalla."},
+          {"start": 5, "end": 8, "text": "Tämä ensiapupiste on ensimmäinen paikka, -"},
+          {"start": 8, "end": 12, "text": "johon apua tarvitsevat sotilaat tuodaan rintamalta."},
+          {"start": 12, "end": 15, "text": "Täällä he saavat lääkärin apua."},
+          {"start": 15, "end": 21, "text": "Alkuvaiheessa apua on voinut antaa sotilaslääkäri tai ensihoitaja."},
+          {"start": 21, "end": 25, "text": "Täällä he saavat apua jo oikeilta lääkäreiltä -"},
+          {"start": 25, "end": 29, "text": "ja potilaan tila pyritään vakauttamaan mahdollisimman hyvin."}
+        ]
+      },
       "characters": [
         {
-          "id": "olena_scene1",
+          "id": "olena-scene1",
           "model": "models/Olena_animations.glb",
           "position": [-2, -25, -5],
           "scale": 10,
-          "rotation": [0, 45, 0],
-          "animation": "Talking_Olena"
+          "rotation": [0, 0.785, 0],
+          "animation": "Talking_Olena",
+          "opacity": 0.7
         }
       ],
       "videos": [
@@ -47,7 +137,7 @@
           "id": "Olena-intro",
           "url": "video/Olena_name.mp4",
           "position": [-15.3, -7.0, 5.25],
-          "rotation": [0, 90, 0],
+          "rotation": [0, 1.5708, 0],
           "size": [64, 40],
           "opacity": 0.9,
           "loop": false,
@@ -58,26 +148,18 @@
           "id": "StabilisationPointIntro",
           "url": "video/Olena2_compressed.mp4",
           "position": [-15.3, -7.0, 5.25],
-          "rotation": [0, 90, 0],
+          "rotation": [0, 1.5708, 0],
           "size": [64, 40],
           "opacity": 0.9,
           "loop": false,
           "triggerAt": 4
         }
       ],
-      "lighting": {
-        "ambient": 1,
-        "directional": 1,
-        "hemisphere": 1
-      },
       "nextScene": "scene2"
     },
     {
       "id": "scene2",
-      "name": {
-        "en": "Bed 1 - Oleh's Story",
-        "fi": "Sänky 1 - Olehin tarina"
-      },
+      "name": { "en": "Oleh's Story", "fi": "Olehin tarina" },
       "audio": {
         "url": "audio/Scene_2.mp3",
         "volume": 0.5,
@@ -85,23 +167,108 @@
         "autoplay": true,
         "delay": 0
       },
+      "subtitles": {
+        "en": [
+          {"start": 5, "end": 8, "text": "This is it. My love,"},
+          {"start": 8, "end": 11, "text": "take care of the children."},
+          {"start": 35, "end": 37, "text": "They fired at us. They shelled us,"},
+          {"start": 37, "end": 40, "text": "and the village behind us"},
+          {"start": 40, "end": 43, "text": "was shelled with 120mm mortars."},
+          {"start": 45, "end": 49, "text": "I couldn't feel my legs. There was no pain."},
+          {"start": 49, "end": 53, "text": "I saw my leg. My boot was torn apart."},
+          {"start": 56, "end": 60, "text": "It happened 13 May 2024 at 12:20."},
+          {"start": 60, "end": 64, "text": "I remember the exact time,"},
+          {"start": 64, "end": 67, "text": "because I checked it after applying the tourniquet."},
+          {"start": 67, "end": 70, "text": "I needed to know when to remove the tourniquet,"},
+          {"start": 70, "end": 73, "text": "in order to not lose my leg."},
+          {"start": 73, "end": 77, "text": "Our comrades-in-arms ran through the trenches to us from 700 metres away."},
+          {"start": 77, "end": 82, "text": "Evacuation was difficult, because we were constantly under fire."},
+          {"start": 84, "end": 87, "text": "The men dragged us through the forest to the edge of the village"},
+          {"start": 87, "end": 89, "text": "trying to avoid the gunfire."},
+          {"start": 89, "end": 95, "text": "There were some houses still standing,"},
+          {"start": 95, "end": 98, "text": "and a vehicle was hidden there."},
+          {"start": 98, "end": 100, "text": "They evacuated us from there."},
+          {"start": 100, "end": 104, "text": "There was no other way."},
+          {"start": 104, "end": 108, "text": "Our comrades dragged us for two kilometres."},
+          {"start": 115, "end": 117, "text": "Where does it hurt?"},
+          {"start": 117, "end": 119, "text": "My left leg."},
+          {"start": 120, "end": 123, "text": "The left leg is slightly wounded."},
+          {"start": 141, "end": 145, "text": "Oleh had lost a lot of blood."},
+          {"start": 145, "end": 153, "text": "In the ambulance, they put him on a drip right away, in order to give him medication intravenously."},
+          {"start": 153, "end": 157, "text": "Right away, they started him on painkillers,"},
+          {"start": 157, "end": 161, "text": "hemostatic agents to stop the bleeding, and other medication required."},
+          {"start": 167, "end": 169, "text": "Oleh had already received first aid."},
+          {"start": 169, "end": 172, "text": "Here, the doctors stabilised him and examined him more."},
+          {"start": 172, "end": 177, "text": "They removed the tourniquet, assessed the cause of the bleeding"},
+          {"start": 177, "end": 179, "text": "and what exactly was happening."},
+          {"start": 179, "end": 183, "text": "Here, Oleh had his first surgery."},
+          {"start": 183, "end": 186, "text": "All his wounds were bandaged carefully,"},
+          {"start": 186, "end": 189, "text": "and he was sent to the hospital,"},
+          {"start": 189, "end": 193, "text": "as you do in cases like this."},
+          {"start": 196, "end": 202, "text": "I remember lights flickering between light and dark like in the movies."},
+          {"start": 202, "end": 206, "text": "I lost consciousness."},
+          {"start": 206, "end": 210, "text": "After that, I don't remember anything but a girl named Olena."}
+        ],
+        "fi": [
+          {"start": 5, "end": 7, "text": "Se oli siinä."},
+          {"start": 7, "end": 11, "text": "Rakkaani, pidä huolta lapsista."},
+          {"start": 35, "end": 40, "text": "Meitä ammuttiin, samoin kylää takanamme."},
+          {"start": 40, "end": 43, "text": "120 millimetrin kranaatinheittimillä."},
+          {"start": 45, "end": 49, "text": "En tuntenut jalkojani. Niissä ei ollut kipua."},
+          {"start": 49, "end": 53, "text": "Näin jalkani ja että saapas oli revennyt."},
+          {"start": 56, "end": 60, "text": "Se tapahtui 13.5.2024 klo 12.20."},
+          {"start": 60, "end": 64, "text": "Muistan kellonajan tarkasti,"},
+          {"start": 64, "end": 67, "text": "koska katsoin kelloa"},
+          {"start": 67, "end": 73, "text": "kiristyssiteen pantuani."},
+          {"start": 73, "end": 77, "text": "Minun piti tietää, milloin ottaa side pois, etten menettäisi jalkaani."},
+          {"start": 77, "end": 82, "text": "Taistelutoverit juoksivat luoksemme juoksuhautoja pitkin 700 metrin päästä."},
+          {"start": 84, "end": 87, "text": "Evakuointi oli vaikeaa, koska meitä tulitettiin koko ajan."},
+          {"start": 87, "end": 89, "text": "Miehet raahasivat meidät metsän läpi kylän reunalle -"},
+          {"start": 89, "end": 95, "text": "yrittäen väistellä tulitusta."},
+          {"start": 95, "end": 98, "text": "Kylässä oli vielä joitakin taloja pystyssä -"},
+          {"start": 98, "end": 100, "text": "ja sinne oli piilotettu ajoneuvo."},
+          {"start": 100, "end": 104, "text": "Sieltä meidät evakuoitiin."},
+          {"start": 104, "end": 108, "text": "Toverit raahasivat meitä kaksi kilometriä."},
+          {"start": 115, "end": 117, "text": "Mihin sattuu?"},
+          {"start": 117, "end": 119, "text": "Vasempaan jalkaan."},
+          {"start": 120, "end": 123, "text": "Vasen jalka on vähän haavoittunut, joten..."},
+          {"start": 141, "end": 145, "text": "Oleh oli menettänyt paljon verta -"},
+          {"start": 145, "end": 153, "text": "ja hänet pantiin heti sairaankuljetusautossa tiputukseen, -"},
+          {"start": 153, "end": 157, "text": "jotta hänelle saatiin annettua lääkettä suoraan suoneen."},
+          {"start": 157, "end": 161, "text": "Hänelle annettiin heti kipulääkettä, -"},
+          {"start": 161, "end": 167, "text": "verenvuotoa tyrehdyttävää lääkettä ja muita tarvittavia lääkkeitä."},
+          {"start": 167, "end": 169, "text": "Oleh oli saanut jo ensihoitoa -"},
+          {"start": 169, "end": 172, "text": "ja täällä lääkärit tutkivat häntä lisää."},
+          {"start": 172, "end": 177, "text": "He irrottivat kiristyssiteen ja tutkivat,"},
+          {"start": 177, "end": 179, "text": "mistä verenvuoto johtui."},
+          {"start": 179, "end": 183, "text": "Täällä Oleh leikattiin ensimmäisen kerran."},
+          {"start": 183, "end": 186, "text": "Kaikki hänen haavansa sidottiin huolellisesti -"},
+          {"start": 186, "end": 189, "text": "ja hänet lähetettiin sairaalaan, -"},
+          {"start": 189, "end": 193, "text": "kuten tällaisissa tapauksissa tehdään."},
+          {"start": 196, "end": 202, "text": "Muistan, kuinka valot välähtelivät, oli vuorotellen pimeää ja valoisaa."},
+          {"start": 202, "end": 206, "text": "Niin kuin elokuvissa."},
+          {"start": 206, "end": 210, "text": "Sen jälkeen en muista muuta. Paitsi Olena-tytön."}
+        ]
+      },
       "characters": [
         {
-          "id": "oleh_scene2",
+          "id": "oleh-scene2",
           "model": "models/Oleh_animations.glb",
           "position": [4, -30.2, 5],
           "scale": 10,
-          "rotation": [0, 90, 0],
-          "animation": "Talking_Oleh"
+          "rotation": [0, 1.5708, 0],
+          "animation": "Talking_Oleh",
+          "opacity": 0.7
         },
         {
-          "id": "olena_scene2",
+          "id": "olena-scene2",
           "model": "models/Olena_animations.glb",
           "position": [4, -25, 11],
           "scale": 10,
-          "rotation": [0, 180, 0],
+          "rotation": [0, 3.1416, 0],
           "animation": "Talking_Olena",
-          "delay": 70000
+          "delay": 70000,
+          "opacity": 0.7
         }
       ],
       "videos": [
@@ -109,9 +276,10 @@
           "id": "Oleh-video",
           "url": "video/1-Oleh_helmetcam-compressed.mp4",
           "position": [-14, -5.5, 7.5],
-          "rotation": [0, 90, 0],
+          "rotation": [0, 1.5708, 0],
           "size": [64, 40],
           "opacity": 0.9,
+          "loop": false,
           "muted": true,
           "triggerAt": 4.5
         },
@@ -119,16 +287,20 @@
           "id": "Oleh-video2",
           "url": "video/Bringing_Oleh_compressed.mp4",
           "position": [-14, -7.0, 7.5],
-          "rotation": [0, 90, 0],
+          "rotation": [0, 1.5708, 0],
           "size": [64, 40],
+          "opacity": 0.9,
+          "loop": false,
           "triggerAt": 12
         },
         {
           "id": "Oleh-video3",
           "url": "video/5-Trenches_Compressed.mp4",
           "position": [-14, -7.0, 7.5],
-          "rotation": [0, 90, 0],
+          "rotation": [0, 1.5708, 0],
           "size": [64, 30],
+          "opacity": 0.9,
+          "loop": false,
           "triggerAt": 73
         },
         {
@@ -137,37 +309,50 @@
           "multiWall": true,
           "muted": true,
           "walls": [
-            { "position": [-14, -7.0, 20.5], "rotation": [0, 90, 0] },
-            { "position": [22.5, -7.0, 20.5], "rotation": [0, -90, 0] },
-            { "position": [3, -7.0, 52.5], "rotation": [0, 180, 0] },
+            { "position": [-14, -7.0, 20.5], "rotation": [0, 1.5708, 0] },
+            { "position": [22.5, -7.0, 20.5], "rotation": [0, -1.5708, 0] },
+            { "position": [3, -7.0, 52.5], "rotation": [0, 3.1416, 0] },
             { "position": [6, -7.0, -10.0], "rotation": [0, 0, 0] }
           ],
           "size": [64, 40],
+          "opacity": 0.9,
+          "loop": false,
           "triggerAt": 115
         },
         {
           "id": "Oleh-video5",
           "url": "video/Stabpoint.mp4",
           "position": [-14, -7.0, 7.5],
-          "rotation": [0, 90, 0],
+          "rotation": [0, 1.5708, 0],
           "size": [64, 30],
+          "opacity": 0.9,
+          "loop": false,
           "triggerAt": 167
         }
       ],
       "lighting": {
-        "position": [4, -3.5, 7.5],
-        "ambient": 0.5,
-        "directional": 0.6,
-        "hemisphere": 0.4
+        "spotlight": {
+          "position": [4, -3.5, 7.5],
+          "volumetric": true
+        },
+        "modifiers": {
+          "ambient": 0.5,
+          "directional": 0.6,
+          "hemisphere": 0.4
+        },
+        "effects": [
+          {
+            "type": "flicker",
+            "triggerTime": 111
+          }
+        ]
       },
       "nextScene": "scene3"
     },
     {
       "id": "scene3",
-      "name": {
-        "en": "Bed 2 - Walking Tour",
-        "fi": "Sänky 2 - Kävelykierros"
-      },
+      "name": { "en": "Walking Tour", "fi": "Kävelykierros" },
+      "activateInteractionOutlines": true,
       "audio": {
         "url": "audio/Scene_3.mp3",
         "volume": 0.5,
@@ -179,25 +364,179 @@
         "refDistance": 15,
         "maxDistance": 50,
         "waypoints": [
-          { "time": 5, "position": [26, -15.0, 19] },
-          { "time": 25, "position": [26, -15.0, 25] },
-          { "time": 46, "position": [24, -19.0, 51] },
-          { "time": 56, "position": [14, -17.0, 51] },
-          { "time": 81, "position": [-12, -13.0, 51] },
-          { "time": 108, "position": [-11, -14.0, 40] },
-          { "time": 116, "position": [-17, -11.0, 47] },
-          { "time": 127, "position": [15, -14.0, -7.5] },
-          { "time": 166, "position": [-9, -23.0, 25.5] },
-          { "time": 179, "position": [27.5, -5.0, 39] },
-          { "time": 192, "position": [27, -4, 28] }
+          {"time": 5, "position": [26, -15.0, 19]},
+          {"time": 25, "position": [26, -15.0, 25]},
+          {"time": 46, "position": [24, -19.0, 51]},
+          {"time": 56, "position": [14, -17.0, 51]},
+          {"time": 81, "position": [-12, -13.0, 51]},
+          {"time": 108, "position": [-11, -14.0, 40]},
+          {"time": 116, "position": [-17, -11.0, 47]},
+          {"time": 127, "position": [15, -14.0, -7.5]},
+          {"time": 166, "position": [-9, -23.0, 25.5]},
+          {"time": 179, "position": [27.5, -5.0, 39]},
+          {"time": 192, "position": [27, -4, 28]}
+        ]
+      },
+      "subtitles": {
+        "en": [
+          {"start": 1, "end": 5, "text": "The first things we need when we arrive at the stabilisation point"},
+          {"start": 5, "end": 10, "text": "are gloves and scissors for immediately"},
+          {"start": 10, "end": 13, "text": "cutting the patients' clothing"},
+          {"start": 13, "end": 15, "text": "in order to examine"},
+          {"start": 15, "end": 19, "text": "the injuries they have sustained."},
+          {"start": 22, "end": 26, "text": "Here we have items for wound treatment:"},
+          {"start": 26, "end": 31, "text": "wipes and bandages"},
+          {"start": 31, "end": 36, "text": "to treat wounds as much as possible,"},
+          {"start": 36, "end": 40, "text": "hemostatic dressings, bandages, and occlusive patches."},
+          {"start": 40, "end": 42, "text": "And clothing,"},
+          {"start": 42, "end": 47, "text": "which is essential because we cut off all the clothing from the men,"},
+          {"start": 47, "end": 51, "text": "and we need to give them something to wear."},
+          {"start": 51, "end": 53, "text": "All the equipment here is for resuscitating."},
+          {"start": 53, "end": 59, "text": "We have many medications, and this device here is a defibrillator."},
+          {"start": 59, "end": 69, "text": "We need it a lot for inserting central venous catheters, intubation tubes, and more."},
+          {"start": 69, "end": 75, "text": "These are all the medications we use during resuscitation."},
+          {"start": 75, "end": 78, "text": "Here, we have adrenaline."},
+          {"start": 78, "end": 80, "text": "This section is for pain relief,"},
+          {"start": 80, "end": 84, "text": "for administering anesthesia in case the patient has any fractures."},
+          {"start": 84, "end": 87, "text": "This is everything we need for first aid."},
+          {"start": 87, "end": 91, "text": "We have all the medications required for treating wounds:"},
+          {"start": 91, "end": 95, "text": "various medication, catheters, infusion systems and fluids for infusion."},
+          {"start": 95, "end": 100, "text": "Painkillers, hemostatics, antibiotics,"},
+          {"start": 100, "end": 105, "text": "everything we might need at this stage, is available."},
+          {"start": 105, "end": 108, "text": "This is section four:"},
+          {"start": 108, "end": 112, "text": "a device for warming infusion fluids."},
+          {"start": 112, "end": 118, "text": "These are my little treasures, my motankas. I always have them with me."},
+          {"start": 118, "end": 123, "text": "They also move with us. They came from the previous stabilisation point,"},
+          {"start": 123, "end": 125, "text": "along with our flag."},
+          {"start": 125, "end": 127, "text": "Here, of course, is the surgical table,"},
+          {"start": 127, "end": 135, "text": "where we have instruments, sutures, and scalpels for removing fragments."},
+          {"start": 135, "end": 142, "text": "If there are any fragments, if we can, we remove them."},
+          {"start": 142, "end": 147, "text": "If the fragment isn't too deep, the doctor will remove it here."},
+          {"start": 147, "end": 152, "text": "Our most important tools are magnets"},
+          {"start": 152, "end": 159, "text": "that we use to detect or extract fragments from wounds."},
+          {"start": 159, "end": 163, "text": "We have different types of magnets."},
+          {"start": 163, "end": 167, "text": "We can't do without a heater here."},
+          {"start": 167, "end": 169, "text": "The patients get cold, because we undress them,"},
+          {"start": 169, "end": 174, "text": "So whenever we have electricity,"},
+          {"start": 174, "end": 177, "text": "we turn the heater on to keep the room warm."},
+          {"start": 177, "end": 179, "text": "This icon of the Virgin Mary"},
+          {"start": 179, "end": 182, "text": "always moves with us,"},
+          {"start": 182, "end": 184, "text": "and so does our clock."},
+          {"start": 184, "end": 189, "text": "These stickers also go everywhere with us."},
+          {"start": 189, "end": 192, "text": "We need the clock for our work here,"},
+          {"start": 192, "end": 198, "text": "because during resuscitation, we need to know"},
+          {"start": 198, "end": 201, "text": "the exact time we started"},
+          {"start": 201, "end": 205, "text": "and the intervals for administering specific medications."},
+          {"start": 205, "end": 207, "text": "That's why we need the clock."},
+          {"start": 211, "end": 214, "text": "There was absolutely nothing here,"},
+          {"start": 214, "end": 217, "text": "not even electricity or water."},
+          {"start": 217, "end": 222, "text": "We set up everything ourselves"},
+          {"start": 222, "end": 225, "text": "and organised it all, to help the wounded."},
+          {"start": 227, "end": 231, "text": "To tell you the truth, I felt like crying."},
+          {"start": 231, "end": 235, "text": "There was a big hole in the wall. You could see right through it."},
+          {"start": 235, "end": 240, "text": "And from here, you could see the sunlight outside through the hole."},
+          {"start": 240, "end": 245, "text": "We covered it up with whatever we had, patched it a bit,"},
+          {"start": 245, "end": 249, "text": "just to stop the wind from blowing through,"},
+          {"start": 249, "end": 253, "text": "at least. Let's just say that."},
+          {"start": 253, "end": 256, "text": "Right now, we have no electricity. We're relying on a generator,"},
+          {"start": 256, "end": 260, "text": "Even though it's cold, we can't heat the space,"},
+          {"start": 260, "end": 263, "text": "because the generator can't handle such high voltage."},
+          {"start": 263, "end": 265, "text": "The poor lads have to be undressed when they are brought here,"},
+          {"start": 265, "end": 267, "text": "even though it's so cold."},
+          {"start": 267, "end": 270, "text": "Small issues like that can pile up"},
+          {"start": 270, "end": 276, "text": "and lead to more serious problems later on."},
+          {"start": 276, "end": 280, "text": "We have to move very often for safety reasons."},
+          {"start": 280, "end": 286, "text": "When the front line moves, we also have to move with it."},
+          {"start": 286, "end": 290, "text": "We have already moved twice."},
+          {"start": 290, "end": 294, "text": "Where we were wasn't safe. There were too many strikes."},
+          {"start": 294, "end": 300, "text": "The Russians even destroyed a church."},
+          {"start": 302, "end": 305, "text": "Nothing is sacred to them."}
+        ],
+        "fi": [
+          {"start": 1, "end": 5, "text": "Ensimmäiset asiat, joita ensihoitopisteellä tarvitsemme, -"},
+          {"start": 5, "end": 7, "text": "ovat kumihanskat ja sakset."},
+          {"start": 8, "end": 13, "text": "Niiden avulla saamme potilailta leikattua vaatteet pois, -"},
+          {"start": 13, "end": 15, "text": "jotta näemme, -"},
+          {"start": 15, "end": 19, "text": "mitä heille on tapahtunut eli mitä vammoja heillä on."},
+          {"start": 22, "end": 26, "text": "Tässä on tarvikkeita haavanhoitoon, -"},
+          {"start": 26, "end": 31, "text": "paperipyyhkeitä ja sideharsoa."},
+          {"start": 31, "end": 36, "text": "Niiden avulla voimme hoitaa haavoja mahdollisimman hyvin -"},
+          {"start": 36, "end": 40, "text": "ja tehdä erilaisia taitoksia, kääreitä ja sulkusidoksia."},
+          {"start": 40, "end": 42, "text": "Ja vaatteita."},
+          {"start": 42, "end": 47, "text": "Niitä tarvitaan, sillä leikkaamme potilailta vaatteet pois."},
+          {"start": 47, "end": 51, "text": "Meidän täytyy siis pukea heidät."},
+          {"start": 51, "end": 53, "text": "Täällä on kaikkea, mitä tarvitaan elvyttämiseen."},
+          {"start": 53, "end": 59, "text": "Tämä laite on defibrillaattori."},
+          {"start": 59, "end": 61, "text": "Näitä käytetään -"},
+          {"start": 61, "end": 69, "text": "keskuslaskimokatetrien ja intubaatioputkien asettamiseen."},
+          {"start": 69, "end": 75, "text": "Tässä on lääkkeitä, joita käytetään elvyttämiseen."},
+          {"start": 75, "end": 78, "text": "Tässä on adrenaliinia."},
+          {"start": 78, "end": 80, "text": "Tässä on kipulääkkeitä."},
+          {"start": 80, "end": 84, "text": "Näitä annetaan, jos jotain on murtunut ja potilas pitää nukuttaa."},
+          {"start": 84, "end": 87, "text": "Nämä ovat ensiapua varten."},
+          {"start": 87, "end": 91, "text": "Täällä on kaikkea, mitä tarvitaan, jos joku on haavoittunut."},
+          {"start": 91, "end": 95, "text": "Täällä on erilaisia lääkkeitä, katetreja ja infuusionesteitä, -"},
+          {"start": 95, "end": 100, "text": "kipulääkkeitä, hemostaatteja ja antibiootteja."},
+          {"start": 100, "end": 105, "text": "Meillä on kaikkea, mitä tässä vaiheessa tarvitaan."},
+          {"start": 105, "end": 108, "text": "Neljäs ryhmä on laite, -"},
+          {"start": 108, "end": 112, "text": "jolla voi lämmittää infuusionestettä."},
+          {"start": 112, "end": 118, "text": "Nämä ovat minun nukkeni. Ne ovat aina mukanani."},
+          {"start": 118, "end": 123, "text": "Ne muuttavat mukanamme paikasta toiseen."},
+          {"start": 123, "end": 125, "text": "Tässä on lippumme."},
+          {"start": 125, "end": 127, "text": "Ja tietysti kirurginpöytä."},
+          {"start": 127, "end": 131, "text": "Tässä on eri instrumentteja, -"},
+          {"start": 131, "end": 135, "text": "välineitä haavojen ompeluun ja skalpelleja."},
+          {"start": 137, "end": 139, "text": "Jos vain pystymme, -"},
+          {"start": 139, "end": 144, "text": "poistamme jo täällä kehosta mahdolliset sirpaleet."},
+          {"start": 144, "end": 147, "text": "Jos sirpale ei ole syvällä, lääkäri poistaa sen."},
+          {"start": 147, "end": 152, "text": "Tärkeimpiä työvälineitä ovat magneetit."},
+          {"start": 152, "end": 159, "text": "Niiden avulla voimme etsiä ja poistaa sirpaleita haavoista."},
+          {"start": 159, "end": 163, "text": "Meillä on erilaisia magneetteja."},
+          {"start": 163, "end": 167, "text": "Ilman lämmitintä täällä ei pärjää."},
+          {"start": 167, "end": 169, "text": "Potilailla on kylmä, mehän riisumme heidät."},
+          {"start": 169, "end": 174, "text": "Joten aina, kun meillä on sähköä, -"},
+          {"start": 174, "end": 177, "text": "pidämme lämmitintä päällä."},
+          {"start": 177, "end": 179, "text": "Jumalansynnyttäjän ikoni."},
+          {"start": 179, "end": 182, "text": "Sekin muuttaa aina mukanamme."},
+          {"start": 182, "end": 184, "text": "Kello ja kaikki tarramme."},
+          {"start": 184, "end": 189, "text": "Nekin matkustavat mukanamme."},
+          {"start": 189, "end": 192, "text": "Työssämme tarvitaan myös kelloa, -"},
+          {"start": 192, "end": 198, "text": "sillä kun elvytämme, meidän täytyy tietää,"},
+          {"start": 198, "end": 201, "text": "moneltako aloitimme -"},
+          {"start": 201, "end": 205, "text": "ja mihin aikaan mitäkin lääkettä annetaan."},
+          {"start": 205, "end": 207, "text": "Tähänkin tarvitaan kelloa."},
+          {"start": 211, "end": 214, "text": "Täällä ei ollut yhtään mitään, -"},
+          {"start": 214, "end": 217, "text": "ei edes sähköä eikä vettä."},
+          {"start": 217, "end": 222, "text": "Järjestimme kaiken itse -"},
+          {"start": 222, "end": 225, "text": "voidaksemme auttaa haavoittuneita."},
+          {"start": 227, "end": 231, "text": "Jos ihan suoraan sanon, niin minun teki mieli itkeä."},
+          {"start": 231, "end": 235, "text": "Seinässä oli kämmenenmentävä aukko."},
+          {"start": 235, "end": 240, "text": "Seinän läpi näki päivänvalon."},
+          {"start": 240, "end": 245, "text": "Olemme saaneet paikkoja jotenkuten korjattua, peitettyä ja teipattua."},
+          {"start": 245, "end": 249, "text": "Jotta tänne ei ainakaan tuulisi sisälle, -"},
+          {"start": 249, "end": 253, "text": "sanotaan nyt vaikka niin."},
+          {"start": 253, "end": 256, "text": "Nyt ei ole sähköä ja olemme generaattorin varassa."},
+          {"start": 256, "end": 260, "text": "Vaikka on kylmä, emme voi lämmittää, -"},
+          {"start": 260, "end": 263, "text": "koska generaattori ei kestä niin isoa jännitettä."},
+          {"start": 263, "end": 265, "text": "Poikaraukat pitää riisua, kun heidät tuodaan tänne, -"},
+          {"start": 265, "end": 267, "text": "vaikka täällä on kylmä."},
+          {"start": 267, "end": 270, "text": "Pienet ongelmat voivat kasaantua -"},
+          {"start": 270, "end": 276, "text": "ja johtaa ajan myötä suurempiin vaikeuksiin."},
+          {"start": 276, "end": 280, "text": "Turvallisuussyistä joudumme vaihtamaan usein paikkaa."},
+          {"start": 280, "end": 286, "text": "Kun rintamalinja siirtyy, meidän on vaihdettava paikkaa sen mukana."},
+          {"start": 286, "end": 290, "text": "Olemme siirtyneet jo kahdesti."},
+          {"start": 290, "end": 294, "text": "Aiemmassa paikassa ei ollut turvallista."},
+          {"start": 294, "end": 300, "text": "Venäläiset tuhosivat jopa kirkon."},
+          {"start": 302, "end": 305, "text": "Heille mikään ei ole pyhää."}
         ]
       },
       "characters": [
         {
-          "id": "olena_scene3",
+          "id": "olena-scene3",
           "model": "models/Olena_animations.glb",
           "position": [2, -25, -5],
-          "scale": 12
+          "scale": 12,
+          "opacity": 0.7
         }
       ],
       "videos": [
@@ -205,80 +544,163 @@
           "id": "Hard-conditions",
           "url": "video/1-Hard_Conditions.mp4",
           "position": [-14, -7.0, 11],
-          "rotation": [0, 90, 0],
+          "rotation": [0, 1.5708, 0],
           "size": [64, 40],
+          "opacity": 0.9,
+          "loop": false,
           "triggerAt": 212
         },
         {
           "id": "Crying",
           "url": "video/2-Crying.mp4",
           "position": [-14, -7.0, 11],
-          "rotation": [0, 90, 0],
+          "rotation": [0, 1.5708, 0],
           "size": [64, 40],
+          "opacity": 0.9,
+          "loop": false,
           "triggerAt": 227
         },
         {
           "id": "Electricity",
           "url": "video/3-Electricity.mp4",
           "position": [-14, -7.0, 11],
-          "rotation": [0, 90, 0],
+          "rotation": [0, 1.5708, 0],
           "size": [64, 40],
+          "opacity": 0.9,
+          "loop": false,
           "triggerAt": 254
         },
         {
           "id": "Security",
           "url": "video/4-Security.mp4",
           "position": [-14, -7.0, 11],
-          "rotation": [0, 90, 0],
+          "rotation": [0, 1.5708, 0],
           "size": [64, 40],
+          "opacity": 0.9,
+          "loop": false,
           "triggerAt": 276
         }
       ],
       "lighting": {
-        "position": [4, -3.5, 20.1],
-        "ambient": 1,
-        "directional": 1,
-        "hemisphere": 1
+        "spotlight": {
+          "position": [4, -3.5, 20.1],
+          "volumetric": true
+        },
+        "effects": [
+          {
+            "type": "walkingTour",
+            "waypoints": [
+              {"time": 5, "position": [26, -15.0, 19]},
+              {"time": 25, "position": [26, -15.0, 25]},
+              {"time": 46, "position": [24, -19.0, 51]},
+              {"time": 56, "position": [14, -17.0, 51]},
+              {"time": 81, "position": [-12, -13.0, 51]},
+              {"time": 108, "position": [-11, -14.0, 40]},
+              {"time": 116, "position": [-17, -11.0, 47]},
+              {"time": 127, "position": [15, -14.0, -7.5]},
+              {"time": 166, "position": [-9, -23.0, 25.5]},
+              {"time": 179, "position": [27.5, -5.0, 39]},
+              {"time": 192, "position": [27, -4, 28]},
+              {"time": 210, "position": [27, -4, 28]}
+            ],
+            "dimLights": {"ambient": 0.05, "directional": 0.2, "hemisphere": 0.02},
+            "endLights": {"ambient": 0.25, "directional": 0.5, "hemisphere": 0.05},
+            "guidanceText": {"en": "Follow the Light...", "fi": "Seuraa valoa..."}
+          }
+        ]
       },
       "nextScene": "scene4"
     },
     {
       "id": "scene4",
-      "name": {
-        "en": "Bed 3 - Final Chapter",
-        "fi": "Sänky 3 - Viimeinen luku"
-      },
+      "name": { "en": "Reflection", "fi": "Heijastus" },
       "audio": {
         "url": "audio/Scene_4.mp3",
         "volume": 0.5,
         "loop": false,
-        "autoplay": true
+        "autoplay": true,
+        "delay": 0
+      },
+      "subtitles": {
+        "en": [
+          {"start": 1, "end": 3, "text": "One more question."},
+          {"start": 3, "end": 10, "text": "Tomorrow, your brothers-in-arms will bring in the bodies of your fallen comrades."},
+          {"start": 10, "end": 13, "text": "Could you let me know what time they will be arriving, approximately?"},
+          {"start": 13, "end": 16, "text": "I need to register all the information"},
+          {"start": 16, "end": 21, "text": "about the bodies, the injuries, and the preliminary diagnosis, as I'm sure you know."},
+          {"start": 21, "end": 24, "text": "I kindly ask you to inform me"},
+          {"start": 24, "end": 27, "text": "when they will approximately be at the stabilisation point."},
+          {"start": 28, "end": 30, "text": "It's very difficult when"},
+          {"start": 30, "end": 34, "text": "it's not possible to save someone who is wounded."},
+          {"start": 34, "end": 37, "text": "It's really hard."},
+          {"start": 38, "end": 40, "text": "There are cases like that."},
+          {"start": 40, "end": 45, "text": "Unfortunately, there are injuries that end the patient's life."},
+          {"start": 45, "end": 51, "text": "That is the worst part."},
+          {"start": 51, "end": 55, "text": "It's also horrible when"},
+          {"start": 55, "end": 61, "text": "there are people who go missing without a trace."},
+          {"start": 61, "end": 63, "text": "for their families,"},
+          {"start": 63, "end": 67, "text": "I can't even imagine how painful it must be,"},
+          {"start": 67, "end": 69, "text": "because"},
+          {"start": 69, "end": 74, "text": "they don't know whether the person is dead or in captivity."},
+          {"start": 74, "end": 77, "text": "The relatives wait until the last moment."},
+          {"start": 79, "end": 84, "text": "Hope dies last, as they say."},
+          {"start": 84, "end": 92, "text": "But still, mothers, wives, sisters, or whoever they may be, hope that they will come back."},
+          {"start": 92, "end": 95, "text": "But they won't come back."}
+        ],
+        "fi": [
+          {"start": 1, "end": 3, "text": "Vielä yksi kysymys."},
+          {"start": 3, "end": 10, "text": "Aseveljenne tuovat sinne huomenna kaatuneiden sotilaiden ruumiit."},
+          {"start": 10, "end": 13, "text": "Voisitteko ilmoittaa, mihin aikaan he ovat tulossa?"},
+          {"start": 13, "end": 16, "text": "Minun on kirjattava kaikki tiedot -"},
+          {"start": 16, "end": 21, "text": "ruumiit, vammat ja alustavat diagnoosit, kuten varmaan tiedätte."},
+          {"start": 21, "end": 24, "text": "Eli ilmoittaisitteko minulle, -"},
+          {"start": 24, "end": 27, "text": "mihin aikaan he suurin piirtein ovat tulossa?"},
+          {"start": 28, "end": 30, "text": "On kamalaa,"},
+          {"start": 30, "end": 34, "text": "kun ei pysty pelastamaan haavoittunutta."},
+          {"start": 34, "end": 37, "text": "Se on aivan kamalaa."},
+          {"start": 38, "end": 40, "text": "On sellaisia tapauksia."},
+          {"start": 40, "end": 45, "text": "Niin pahoja vammoja, että elämä päättyy niihin."},
+          {"start": 45, "end": 51, "text": "Se on kaikkein pahinta."},
+          {"start": 51, "end": 55, "text": "Ja todella hirveitä ovat myös tapaukset, -"},
+          {"start": 55, "end": 61, "text": "joissa ihminen katoaa jälkiä jättämättä."},
+          {"start": 61, "end": 63, "text": "En pysty edes kuvittelemaan, -"},
+          {"start": 63, "end": 67, "text": "kuinka raskasta sellainen on perheelle."},
+          {"start": 67, "end": 69, "text": "Sillä..."},
+          {"start": 69, "end": 74, "text": "Ei tiedä, onko läheinen kuollut tai vangittu."},
+          {"start": 74, "end": 77, "text": "Sukulaiset odottavat viimeiseen asti."},
+          {"start": 79, "end": 84, "text": "Sitähän sanotaan, että toivo kuolee viimeisenä."},
+          {"start": 84, "end": 92, "text": "Niinpä he toivovat. Äidit, vaimot ja sisaret, kuka nyt kyseessä onkaan, -"},
+          {"start": 92, "end": 95, "text": "he toivovat, että heidän läheisensä palaavat."},
+          {"start": 95, "end": 98, "text": "Mutta eivät he palaa."}
+        ]
       },
       "characters": [
         {
-          "id": "olena_scene4",
+          "id": "olena-scene4",
           "model": "models/Olena_animations.glb",
           "position": [-5, -24, 48],
-          "rotation": [0, 180, 0],
+          "rotation": [0, 3.1416, 0],
           "scale": 10,
-          "animation": "Sitting_Talking_Olena"
+          "animation": "Sitting_Talking_Olena",
+          "opacity": 0.7
         },
         {
-          "id": "oleh_scene4",
+          "id": "oleh-scene4",
           "model": "models/Oleh_animations.glb",
           "position": [3, -32, 36.407],
           "scale": 10,
-          "rotation": [0, 90, 0],
+          "rotation": [0, 1.5708, 0],
           "animation": "Idle_Oleh",
-          "delay": 15000
+          "delay": 15000,
+          "opacity": 0.7
         }
       ],
       "objects": [
         {
-          "id": "chair_scene4",
+          "id": "chair",
           "model": "models/chair.glb",
           "position": [-5, -25, 48],
-          "rotation": [0, 180, 0],
+          "rotation": [0, 3.1416, 0],
           "scale": 15
         }
       ],
@@ -287,51 +709,197 @@
           "id": "Voicemess",
           "url": "video/1-Voicemess_compressed.mp4",
           "position": [3, -7.0, 52.5],
-          "rotation": [0, 180, 0],
+          "rotation": [0, 3.1416, 0],
           "size": [64, 40],
+          "opacity": 0.9,
+          "loop": false,
           "triggerAt": 2
         },
         {
           "id": "Death",
           "url": "video/Death_compressed.mp4",
           "position": [3, -7.0, 52.5],
-          "rotation": [0, 180, 0],
+          "rotation": [0, 3.1416, 0],
           "size": [64, 40],
+          "opacity": 0.9,
+          "loop": false,
           "triggerAt": 27.5
         }
       ],
       "lighting": {
-        "position": [4, -3.5, 32.7],
-        "ambient": 0.3,
-        "directional": 0.4,
-        "hemisphere": 0.3
+        "spotlight": {
+          "position": [4, -3.5, 32.7],
+          "volumetric": true
+        },
+        "modifiers": {
+          "ambient": 0.3,
+          "directional": 0.4,
+          "hemisphere": 0.3
+        }
       }
+    }
+  ],
+  "interactableObjects": [
+    {
+      "id": "photo-frame",
+      "name": { "en": "Photo Frame", "fi": "Valokuvakehys" },
+      "model": "models/photoframe.glb",
+      "original": {
+        "position": [6, -20, -11],
+        "rotation": [0, 3.14159, 0],
+        "scale": [15, 15, 15]
+      },
+      "transformed": {
+        "position": [12, -10, -5],
+        "rotation": [0.7854, 3.14159, 0],
+        "scale": [80, 80, 80]
+      },
+      "hasInfoBox": false,
+      "infoBoxMessage": { "en": "", "fi": "" },
+      "enableRotation": false
+    },
+    {
+      "id": "defibrillator",
+      "name": { "en": "Defibrillator", "fi": "Defibrillaattori" },
+      "model": "models/defibrillator.glb",
+      "original": {
+        "position": [18.185, -20.801, 51.583],
+        "rotation": [0, 3.14159, 0],
+        "scale": [1, 1, 1]
+      },
+      "transformed": {
+        "position": [11.645, -18.75, 43.831],
+        "rotation": [0, 3.14159, 0],
+        "scale": [3, 3, 3]
+      },
+      "hasInfoBox": true,
+      "infoBoxMessage": {
+        "en": "Restores heart rhythm in cardiac arrest.",
+        "fi": "Palauttaa sydämen rytmin sydänpysähdyksessä."
+      },
+      "enableRotation": true
+    },
+    {
+      "id": "adrenaline",
+      "name": { "en": "Adrenaline", "fi": "Adrenaliini" },
+      "model": "models/adrenaline.glb",
+      "original": {
+        "position": [0.816, -17.303, 54.426],
+        "rotation": [0, 0, 0],
+        "scale": [1, 1, 1]
+      },
+      "transformed": {
+        "position": [0.816, -17.303, 49.651],
+        "rotation": [0, 0, 0],
+        "scale": [3, 3, 3]
+      },
+      "hasInfoBox": true,
+      "infoBoxMessage": {
+        "en": "Increases heart rate and blood pressure in shock or cardiac arrest.",
+        "fi": "Lisää sydämen sykettä ja verenpainetta shokissa tai sydänpysähdyksessä."
+      },
+      "enableRotation": true
+    },
+    {
+      "id": "bodychart",
+      "name": { "en": "Bodychart", "fi": "Kehokuvio" },
+      "model": "models/bodychart.glb",
+      "original": {
+        "position": [-13.5, -17, -3],
+        "rotation": [0, 0, 0],
+        "scale": [3, 3, 3]
+      },
+      "transformed": {
+        "position": [-10, -17, -3],
+        "rotation": [0, 0, 0],
+        "scale": [15, 15, 15]
+      },
+      "hasInfoBox": true,
+      "infoBoxMessage": {
+        "en": "Visual guide for recording injuries on the human body.",
+        "fi": "Kaavio vammojen kirjaamiseen ihmiskehossa."
+      },
+      "enableRotation": true
+    },
+    {
+      "id": "heater",
+      "name": { "en": "Heater", "fi": "Lämmitin" },
+      "model": "models/heater.glb",
+      "original": {
+        "position": [-10.058, -26.236, 25.759],
+        "rotation": [0, 77, 0],
+        "scale": [1.15, 1.15, 1.15]
+      },
+      "transformed": {
+        "position": [-7.647, -16.11, 25.759],
+        "rotation": [0, 77, 0],
+        "scale": [3, 3, 3]
+      },
+      "hasInfoBox": true,
+      "infoBoxMessage": {
+        "en": "Provides warmth to prevent hypothermia",
+        "fi": "Tarjoaa lämpöä hypotermian estämiseksi"
+      },
+      "enableRotation": true
+    },
+    {
+      "id": "medicine-bottle",
+      "name": { "en": "Antiseptic", "fi": "Desinfiointiaine" },
+      "model": "models/medicine_bottle.glb",
+      "original": {
+        "position": [-14, -15.7, 6.8],
+        "rotation": [0, 90, 0],
+        "scale": [0.35, 0.35, 0.35]
+      },
+      "transformed": {
+        "position": [-9, -16, 6.8],
+        "rotation": [0, 90, 0],
+        "scale": [2, 2, 2]
+      },
+      "hasInfoBox": true,
+      "infoBoxMessage": {
+        "en": "Prevents infection in wounds.",
+        "fi": "Estää infektioita haavoissa."
+      },
+      "enableRotation": true
+    },
+    {
+      "id": "scissors",
+      "name": { "en": "Scissors", "fi": "Sakset" },
+      "model": "models/scissors.glb",
+      "original": {
+        "position": [25, -19.5, 18.8],
+        "rotation": [0, 0, 0],
+        "scale": [0.4, 0.4, 0.4]
+      },
+      "transformed": {
+        "position": [18, -15, 16],
+        "rotation": [0, 0, 0],
+        "scale": [1, 1, 1]
+      },
+      "hasInfoBox": true,
+      "infoBoxMessage": {
+        "en": "Cuts clothing, bandages, or medical supplies quickly.",
+        "fi": "Leikkaa nopeasti vaatteita, siteitä tai lääkintätarvikkeita."
+      },
+      "enableRotation": true
     }
   ],
   "ui": {
     "homeScreen": {
       "backgroundImage": "images/home-page-image.jpg",
       "backgroundImageDesktop": "images/bg_desktop.png",
-      "title": {
-        "en": "Shadows of the Stabilisation Point",
-        "fi": "Rintamaklinikan varjot"
-      },
-      "subtitle": {
-        "en": "An immersive documentary experience",
-        "fi": "Immersiivinen dokumenttikokemus"
-      },
-      "startButtonText": {
-        "en": "Start Experience",
-        "fi": "Aloita kokemus"
-      }
+      "title": { "en": "Shadows of the Stabilisation Point", "fi": "Ensihoitoklinikan varjot" },
+      "subtitle": { "en": "An immersive documentary", "fi": "Immersiivinen dokumentti" },
+      "startButtonText": { "en": "Start Experience", "fi": "Aloita kokemus" }
     },
     "branding": {
       "logo": "logos/Yle-logo_RGB_valkoinen.png",
-      "primaryColor": "#ffffff",
+      "primaryColor": "#00B7FF",
       "font": "YleNext",
       "fontFiles": {
-        "woff2": "fonts/YleNext-Regular.woff2",
-        "woff": "fonts/YleNext-Regular.woff"
+        "woff2": "YleNext-Regular.woff2",
+        "woff": "YleNext-Regular.woff"
       }
     },
     "controls": {
@@ -343,13 +911,41 @@
   "ending": {
     "video": "video/OlenaEnd.mp4",
     "text": {
-      "en": "Thank you for experiencing this story",
-      "fi": "Kiitos kokemuksesta"
+      "en": "Forced to flee from the advancing Russian forces in November 2024, the staff of the stabilisation point left a brief yet impactful legacy.\n\nTheir lifesaving mission was halted after less than a month in the front line.",
+      "fi": "Pakotettuina pakenemaan eteneviä Venäjän joukkoja marraskuussa 2024, joukkosidontapaikan henkilökunta jätti jälkeensä lyhyen mutta merkittävän perinnön.\n\nHeidän elintärkeä tehtävänsä etulinjassa keskeytyi alle kuukaudessa."
     },
-    "credits": [
-      { "role": { "en": "Producer", "fi": "Tuottaja" }, "name": "Yle" },
-      { "role": { "en": "Development", "fi": "Kehitys" }, "name": "Metropolia UAS / HXRC" },
-      { "role": { "en": "Lead Developer", "fi": "Pääkehittäjä" }, "name": "Narmeen Marji" }
-    ]
+    "quotes": [
+      {
+        "en": "I just want to forget everything that happened here.",
+        "fi": "Haluaisin unohtaa kaiken, mitä täällä tapahtui."
+      },
+      {
+        "en": "I only want to see my people happy",
+        "fi": "Haluan nähdä kansani vain onnellisena"
+      },
+      {
+        "en": "especially these who are now...",
+        "fi": "erityisesti he, jotka nyt..."
+      },
+      {
+        "en": "that's it...",
+        "fi": "siinä kaikki..."
+      }
+    ],
+    "buttons": {
+      "learnMore": {
+        "en": "Learn More",
+        "fi": "Katso lisää",
+        "url": "https://areena.yle.fi/1-69328132"
+      },
+      "returnHome": {
+        "en": "Return to Title Screen",
+        "fi": "Palaa alkuun"
+      }
+    },
+    "triggerMode": "characterFade",
+    "triggerCharacterId": "oleh-scene4",
+    "triggerSceneId": "scene4",
+    "endingTrigger": "lastVideo"
   }
 }

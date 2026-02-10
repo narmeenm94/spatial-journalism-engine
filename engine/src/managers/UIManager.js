@@ -12,6 +12,7 @@ export class UIManager {
     this.config = null
     this.elements = new Map()
     this.language = options.defaultLanguage || 'en'
+    this.storyBaseUrl = options.storyBaseUrl || ''
     
     this.onLanguageChange = options.onLanguageChange
     this.onModeSelect = options.onModeSelect
@@ -26,6 +27,7 @@ export class UIManager {
   init(uiConfig, projectConfig) {
     this.config = uiConfig
     this.projectConfig = projectConfig
+    this.basePath = projectConfig.assets?.basePath || './assets/'
     
     // Load custom font if specified
     if (uiConfig.branding?.fontFiles) {
@@ -37,18 +39,47 @@ export class UIManager {
   }
 
   /**
+   * Resolve asset path relative to basePath and story location
+   * @param {string} path - Asset path
+   * @returns {string} Resolved path
+   */
+  resolveAssetPath(path) {
+    if (!path) return path
+    // Don't modify absolute URLs
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      return path
+    }
+    // For absolute paths starting with /, return as-is
+    if (path.startsWith('/')) {
+      return path
+    }
+    // Combine basePath with path and resolve against story base URL
+    const combinedPath = `${this.basePath}${path}`
+    try {
+      const resolved = new URL(combinedPath, this.storyBaseUrl)
+      return resolved.pathname
+    } catch (e) {
+      // Fallback to combined path if URL resolution fails
+      return combinedPath
+    }
+  }
+
+  /**
    * Load custom font
    * @param {object} branding - Branding configuration
    */
   loadCustomFont(branding) {
     if (!branding.fontFiles) return
 
+    const woff2Path = branding.fontFiles.woff2 ? this.resolveAssetPath(branding.fontFiles.woff2) : null
+    const woffPath = branding.fontFiles.woff ? this.resolveAssetPath(branding.fontFiles.woff) : null
+
     const style = document.createElement('style')
     style.textContent = `
       @font-face {
         font-family: '${branding.font || 'CustomFont'}';
-        src: ${branding.fontFiles.woff2 ? `url('${branding.fontFiles.woff2}') format('woff2'),` : ''}
-             ${branding.fontFiles.woff ? `url('${branding.fontFiles.woff}') format('woff')` : ''};
+        src: ${woff2Path ? `url('${woff2Path}') format('woff2'),` : ''}
+             ${woffPath ? `url('${woffPath}') format('woff')` : ''};
         font-weight: normal;
         font-style: normal;
         font-display: swap;
@@ -280,16 +311,21 @@ export class UIManager {
     screen.className = 'sj-ui sj-screen sj-home-screen'
     screen.id = 'sj-home-screen'
     
-    // Set background image
+    // Set background image (resolve paths)
     if (homeConfig.backgroundImage) {
       const isMobile = window.innerWidth < 768
-      const bgImage = isMobile ? homeConfig.backgroundImage : 
-        (homeConfig.backgroundImageDesktop || homeConfig.backgroundImage)
+      const mobileBg = this.resolveAssetPath(homeConfig.backgroundImage)
+      const desktopBg = homeConfig.backgroundImageDesktop 
+        ? this.resolveAssetPath(homeConfig.backgroundImageDesktop) 
+        : mobileBg
+      const bgImage = isMobile ? mobileBg : desktopBg
       screen.style.setProperty('--bg-image', `url(${bgImage})`)
-      screen.querySelector
     }
     
     // Add background image style
+    const desktopBgUrl = homeConfig.backgroundImageDesktop 
+      ? `url(${this.resolveAssetPath(homeConfig.backgroundImageDesktop)})` 
+      : 'var(--bg-image)'
     const bgStyle = document.createElement('style')
     bgStyle.textContent = `
       #sj-home-screen::before {
@@ -297,7 +333,7 @@ export class UIManager {
       }
       @media (min-width: 768px) {
         #sj-home-screen::before {
-          background-image: ${homeConfig.backgroundImageDesktop ? `url(${homeConfig.backgroundImageDesktop})` : 'var(--bg-image)'};
+          background-image: ${desktopBgUrl};
         }
       }
     `
@@ -339,7 +375,7 @@ export class UIManager {
     if (this.config.branding?.logo) {
       const logo = document.createElement('img')
       logo.className = 'sj-logo'
-      logo.src = this.config.branding.logo
+      logo.src = this.resolveAssetPath(this.config.branding.logo)
       logo.alt = 'Logo'
       screen.appendChild(logo)
     }

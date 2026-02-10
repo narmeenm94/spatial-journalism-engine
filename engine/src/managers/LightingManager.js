@@ -66,6 +66,23 @@ export class LightingManager {
   }
 
   /**
+   * Update original intensities to current values
+   * Call this after setupLighting() to ensure multipliers use correct base values
+   */
+  updateOriginalIntensities() {
+    if (this.lights.ambient) {
+      this.originalIntensities.ambient = this.lights.ambient.intensity
+    }
+    if (this.lights.directional) {
+      this.originalIntensities.directional = this.lights.directional.intensity
+    }
+    if (this.lights.hemisphere) {
+      this.originalIntensities.hemisphere = this.lights.hemisphere.intensity
+    }
+    console.log('LightingManager: Updated original intensities:', { ...this.originalIntensities })
+  }
+
+  /**
    * Set lights from external references (for 8th Wall integration)
    * @param {object} lightsRef - Object containing light references
    */
@@ -86,7 +103,7 @@ export class LightingManager {
 
   /**
    * Apply lighting configuration from scene
-   * @param {object} lightingConfig - Lighting config from scene JSON
+   * @param {object} lightingConfig - Lighting config from scene JSON (multipliers)
    */
   applySceneLighting(lightingConfig) {
     if (!lightingConfig) return
@@ -96,6 +113,13 @@ export class LightingManager {
       directional: lightingConfig.directional ?? 1,
       hemisphere: lightingConfig.hemisphere ?? 1
     }
+
+    console.log('LightingManager: Applying scene lighting multipliers:', multipliers,
+      '→ targets:', {
+        ambient: (this.originalIntensities.ambient * multipliers.ambient).toFixed(3),
+        directional: (this.originalIntensities.directional * multipliers.directional).toFixed(3),
+        hemisphere: (this.originalIntensities.hemisphere * multipliers.hemisphere).toFixed(3)
+      })
 
     this.transitionLightIntensities(multipliers)
   }

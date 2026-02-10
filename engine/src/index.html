@@ -8,8 +8,19 @@
   
   <!-- Three.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <!-- GLTFLoader addon (required for loading .glb models) -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+  <!-- OrbitControls for camera navigation -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <!-- Post-processing for outline/glow effects on interactive objects -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/OutlinePass.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
   
-  <!-- 8th Wall (loaded dynamically based on project key) -->
+  <!-- 8th Wall open-source libraries: loaded dynamically only in AR mode (see script below) -->
+  
   <style>
     * {
       margin: 0;
@@ -75,8 +86,128 @@
   </div>
   
   <script>
-    // Engine will be initialized here or via external script
-    // Example: SJEngine.init({ storyUrl: './story.json' })
+    // Parse URL params early
+    var params = new URLSearchParams(window.location.search);
+    var forceMode = params.get('mode') || null;
+    var source = params.get('source') || null; // 'postMessage' when previewing from Creator
+
+    // Load 8th Wall scripts only in AR mode
+    if (forceMode === 'ar') {
+      var xrScripts = [
+        '/external/xrextras/xrextras.js',
+        '/external/landing-page/landing-page.js',
+        '/external/scripts/coaching-overlay.js'
+      ];
+      xrScripts.forEach(function(src) {
+        var s = document.createElement('script');
+        s.src = src;
+        document.head.appendChild(s);
+      });
+      var xrMain = document.createElement('script');
+      xrMain.src = '/external/xr/xr.js';
+      xrMain.async = true;
+      xrMain.dataset.preloadChunks = 'slam';
+      document.head.appendChild(xrMain);
+    }
+  </script>
+
+  <script>
+    window.addEventListener('DOMContentLoaded', function() {
+      var storyUrl = params.get('story') || '/examples/shadows-rebuilt/story.json';
+
+      console.log('Loading story:', storyUrl, forceMode ? '(mode: ' + forceMode + ')' : '');
+
+      // ─── postMessage mode: Creator sends story JSON directly ───
+      if (source === 'postMessage') {
+        document.querySelector('.sj-loading-text').textContent = 'Waiting for story from Creator…';
+        window.addEventListener('message', function handler(event) {
+          if (!event.data || event.data.type !== 'loadStory') return;
+          window.removeEventListener('message', handler);
+
+          document.querySelector('.sj-loading-text').textContent = 'Loading experience…';
+
+          if (typeof SJEngine === 'undefined') {
+            document.querySelector('.sj-loading-text').textContent = 'Engine bundle not loaded';
+            return;
+          }
+
+          // ── Create blob URLs for local asset files received from the Creator ──
+          var localAssetBlobUrls = {};
+          if (event.data.localAssets) {
+            var entries = Object.entries(event.data.localAssets);
+            for (var i = 0; i < entries.length; i++) {
+              var assetKey = entries[i][0];   // e.g. "models/Olena.glb"
+              var assetInfo = entries[i][1];   // { data: ArrayBuffer, type: string }
+              try {
+                var blob = new Blob([assetInfo.data], { type: assetInfo.type });
+                localAssetBlobUrls[assetKey] = URL.createObjectURL(blob);
+                console.log('[Preview] Blob URL for', assetKey, '→', localAssetBlobUrls[assetKey]);
+              } catch (e) {
+                console.warn('[Preview] Failed to create blob URL for', assetKey, e);
+              }
+            }
+          }
+
+          var engine = new SJEngine({
+            container: document.getElementById('sj-container'),
+            onReady: function() {
+              document.getElementById('sj-loading').style.display = 'none';
+            },
+            onError: function(error) {
+              console.error('Engine error:', error);
+              document.querySelector('.sj-loading-text').textContent = 'Error: ' + error.message;
+            }
+          });
+
+          // Set the story base URL so asset paths resolve correctly
+          if (event.data.storyBaseUrl) {
+            engine.parser.storyBaseUrl = event.data.storyBaseUrl;
+          }
+
+          // Store local asset blob URLs on the parser so resolvePath can use them
+          engine.parser.localAssetBlobUrls = localAssetBlobUrls;
+
+          // Initialize directly from the story object (no fetch needed)
+          engine.init(event.data.story).catch(function(err) {
+            console.error('Preview init failed:', err);
+            document.querySelector('.sj-loading-text').textContent = 'Preview error: ' + err.message;
+          });
+
+          window.sjEngine = engine;
+        });
+
+        // Tell the parent (Creator) that the engine iframe is ready to receive data
+        if (window.parent !== window) {
+          window.parent.postMessage({ type: 'engineReady' }, '*');
+        }
+        return;
+      }
+
+      // ─── Standard mode: fetch story from URL ───
+      if (typeof SJEngine !== 'undefined') {
+        var engine = new SJEngine({
+          container: document.getElementById('sj-container'),
+          onReady: function() {
+            console.log('Engine ready!');
+            document.getElementById('sj-loading').style.display = 'none';
+          },
+          onError: function(error) {
+            console.error('Engine error:', error);
+            document.querySelector('.sj-loading-text').textContent = 'Error: ' + error.message;
+          }
+        });
+
+        engine.init(storyUrl).catch(function(err) {
+          console.error('Failed to initialize:', err);
+          document.querySelector('.sj-loading-text').textContent = 'Failed to load story';
+        });
+
+        window.sjEngine = engine;
+      } else {
+        console.error('SJEngine not loaded');
+        document.querySelector('.sj-loading-text').textContent = 'Engine not loaded';
+      }
+    });
   </script>
 </body>
 </html>

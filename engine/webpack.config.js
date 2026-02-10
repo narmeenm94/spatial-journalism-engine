@@ -46,6 +46,11 @@ module.exports = {
           to: 'schema',
           noErrorOnMissing: true,
         },
+        {
+          from: 'external',
+          to: 'external',
+          noErrorOnMissing: true,
+        },
       ],
     }),
   ],
@@ -59,10 +64,16 @@ module.exports = {
         directory: path.resolve(__dirname, '../examples'),
         publicPath: '/examples',
       },
+      {
+        directory: path.resolve(__dirname, '../external'),
+        publicPath: '/external',
+      },
     ],
-    port: 3000,
+    port: 8080,
     hot: true,
-    https: true,
+    client: {
+      overlay: false,  // Disable error overlay (cross-origin CDN scripts cause "Script error")
+    },
   },
   resolve: {
     extensions: ['.js'],
