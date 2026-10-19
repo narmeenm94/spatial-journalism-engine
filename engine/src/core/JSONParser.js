@@ -3,6 +3,7 @@
  * Uses Ajv for JSON Schema validation
  */
 
+import { storyChecks, resolveEndingTrigger } from './storyChecks.js'
 import Ajv from 'ajv'
 
 export class JSONParser {
@@ -34,15 +35,22 @@ export class JSONParser {
    */
   validate(story) {
     if (!this.validator) {
-      console.warn('Schema not loaded, skipping validation')
-      return { isValid: true, errors: [] }
+      throw new Error(
+        'Story validation is unavailable. Please reload the player.'
+      )
     }
 
-    const isValid = this.validator(story)
-    
+    const schemaValid = this.validator(story)
+    const semanticErrors = schemaValid
+      ? storyChecks(story).map((message) => ({ path: '/', message }))
+      : []
+    const isValid = schemaValid && semanticErrors.length === 0
+
     return {
       isValid,
-      errors: isValid ? [] : this.formatErrors(this.validator.errors)
+      errors: schemaValid
+        ? semanticErrors
+        : this.formatErrors(this.validator.errors)
     }
   }
 
@@ -52,7 +60,7 @@ export class JSONParser {
    * @returns {array} Formatted error messages
    */
   formatErrors(errors) {
-    return errors.map(error => ({
+    return errors.map((error) => ({
       path: error.instancePath || '/',
       message: error.message,
       params: error.params,
@@ -74,7 +82,7 @@ export class JSONParser {
       // Store the base URL from the story location for resolving relative paths
       const url = new URL(source, window.location.href)
       this.storyBaseUrl = url.href.substring(0, url.href.lastIndexOf('/') + 1)
-      
+
       const response = await fetch(source)
       if (!response.ok) {
         throw new Error(`Failed to load story: ${response.statusText}`)
@@ -84,20 +92,35 @@ export class JSONParser {
       story = source
       // For object sources, use current page location (unless storyBaseUrl was set externally)
       if (!this.storyBaseUrl) {
-        this.storyBaseUrl = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1)
+        this.storyBaseUrl = window.location.href.substring(
+          0,
+          window.location.href.lastIndexOf('/') + 1
+        )
       }
     }
 
     // Skip validation when story comes from the Creator (different internal format)
     // or when explicitly requested. The normalize step handles both formats.
-    if (!options.skipValidation && typeof source === 'string') {
+    if (!options.skipValidation) {
       const validation = this.validate(story)
       if (!validation.isValid) {
         console.error('Story validation failed:', validation.errors)
-        throw new Error(`Invalid story configuration: ${validation.errors.map(e => e.message).join(', ')}`)
+        throw new Error(
+          `Invalid story configuration: ${validation.errors.map((e) => e.message).join(', ')}`
+        )
       }
     }
 
+    const ids = new Set()
+    for (const scene of story.scenes) {
+      if (!scene.id || ids.has(scene.id))
+        throw new Error('Every chapter must have a unique ID.')
+      ids.add(scene.id)
+    }
+    this.localAssetBlobUrls = {
+      ...story.embeddedAssets,
+      ...this.localAssetBlobUrls
+    }
     // Apply defaults and normalize the story
     return this.normalize(story)
   }
@@ -120,12 +143,12 @@ export class JSONParser {
       assets: {
         basePath: './assets/',
         preload: [],
-        ...story.project.assets
+        ...story.project?.assets
       }
     }
 
     // Normalize scenes
-    normalized.scenes = story.scenes.map((scene, index) => 
+    normalized.scenes = story.scenes.map((scene, index) =>
       this.normalizeScene(scene, index, normalized.project)
     )
 
@@ -139,6 +162,17 @@ export class JSONParser {
         showSettings: true
       },
       ...story.ui
+    }
+    if (normalized.ui.homeScreen?.startButton)
+      normalized.ui.homeScreen.startButtonText =
+        normalized.ui.homeScreen.startButton
+    if (normalized.ending) {
+      const mode = resolveEndingTrigger(normalized.ending, story.formatVersion)
+      normalized.ending = {
+        ...normalized.ending,
+        triggerMode: mode || 'audioEnd',
+        endingTrigger: mode || 'audioEnd'
+      }
     }
 
     return normalized
@@ -155,26 +189,40 @@ export class JSONParser {
     const basePath = project.assets.basePath
 
     // Accept both engine format (name) and creator format (title)
-    const sceneName = scene.name || scene.title || `Scene ${index + 1}`
+    const sceneName =
+      this.getLocalizedString(
+        scene.title || scene.name,
+        project.defaultLanguage
+      ) || `Chapter ${index + 1}`
 
     // Audio: accept single object or array of audio configs
     const rawAudioArr = scene.audio
-      ? (Array.isArray(scene.audio) ? scene.audio : [scene.audio])
+      ? Array.isArray(scene.audio)
+        ? scene.audio
+        : [scene.audio]
       : []
 
     // Subtitles: accept both per-language object and array-of-objects format
     let subtitles = scene.subtitles
-    if (subtitles && !Array.isArray(subtitles) && typeof subtitles === 'object') {
+    if (
+      subtitles &&
+      !Array.isArray(subtitles) &&
+      typeof subtitles === 'object'
+    ) {
       // Already per-language object format — pass through (SceneManager handles it)
-    } else if (Array.isArray(subtitles) && subtitles.length > 0 && typeof subtitles[0].text === 'object') {
+    } else if (
+      Array.isArray(subtitles) &&
+      subtitles.length > 0 &&
+      typeof subtitles[0].text === 'object'
+    ) {
       // Creator format: [{id, start, end, text: {en: "...", fi: "..."}}]
       // Convert to engine's per-language format: {en: [{start, end, text}], fi: [...]}
       const langs = project.languages || ['en']
       const converted = {}
-      langs.forEach(lang => {
+      langs.forEach((lang) => {
         converted[lang] = subtitles
-          .filter(s => s.text && s.text[lang])
-          .map(s => ({ start: s.start, end: s.end, text: s.text[lang] }))
+          .filter((s) => s.text && s.text[lang])
+          .map((s) => ({ start: s.start, end: s.end, text: s.text[lang] }))
       })
       subtitles = converted
     }
@@ -185,11 +233,12 @@ export class JSONParser {
       isActive: false,
       ...scene,
       name: sceneName,
+      localizedTitle: scene.title || scene.name || sceneName,
       subtitles,
-      
+
       // Normalize audio (always an array)
       audio: rawAudioArr.map((a, ai) => {
-        const url = a.url || a.file || ''
+        const url = a.file ?? a.url ?? ''
         return {
           id: a.id || `audio_${scene.id}_${ai}`,
           volume: 0.5,
@@ -234,7 +283,7 @@ export class JSONParser {
         ...video,
         id: video.id || `video_${scene.id}_${i}`,
         url: this.resolvePath(video.url, basePath),
-        triggerAt: video.triggerAt ?? video.triggerTime ?? 0,
+        triggerAt: video.triggerTime ?? video.triggerAt ?? 0,
         position: this.normalizeVector3(video.position),
         rotation: this.normalizeRotation(video.rotation),
         size: video.size || [64, 40]
@@ -253,8 +302,15 @@ export class JSONParser {
    */
   resolvePath(path, basePath) {
     if (!path) return path
+    // Embedded assets take priority even when the original reference was a remote URL.
+    if (this.localAssetBlobUrls?.[path]) return this.localAssetBlobUrls[path]
     // Don't modify absolute URLs or data/blob URLs
-    if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('blob:') || path.startsWith('data:')) {
+    if (
+      path.startsWith('http://') ||
+      path.startsWith('https://') ||
+      path.startsWith('blob:') ||
+      path.startsWith('data:')
+    ) {
       return path
     }
 
@@ -280,7 +336,8 @@ export class JSONParser {
     // Resolve against story base URL to get absolute path
     try {
       const resolved = new URL(combinedPath, this.storyBaseUrl)
-      return resolved.pathname
+      // Preserve the hosting origin and any query/hash (for remote media URLs).
+      return resolved.href
     } catch (e) {
       // Fallback to combined path if URL resolution fails
       return combinedPath
@@ -301,20 +358,37 @@ export class JSONParser {
     if (!lighting) return null
 
     const result = { ...lighting }
+    result.effects = (lighting.effects || []).filter(
+      (e) =>
+        !(e.type === 'flicker' && lighting.flicker) &&
+        !(e.type === 'walkingTour' && lighting.walkingTour)
+    )
+    if (lighting.flicker)
+      result.effects.push({ ...lighting.flicker, type: 'flicker' })
+    if (lighting.walkingTour)
+      result.effects.push({ ...lighting.walkingTour, type: 'walkingTour' })
 
     // The creator stores scene point/spot lights as `spotlights: SpotlightConfig[]`.
     // The engine's SceneManager already understands `spotlight` (singular) for
     // volumetric lighting, but not additional dynamic lights.
     // We keep both: `spotlight` for the first volumetric-capable light,
     // and `dynamicLights` for all spotlights that should appear as real Three.js lights.
-    if (lighting.spotlights && Array.isArray(lighting.spotlights) && lighting.spotlights.length > 0) {
+    if (
+      lighting.spotlights &&
+      Array.isArray(lighting.spotlights) &&
+      lighting.spotlights.length > 0
+    ) {
       // If engine-format `spotlight` is not already set, derive it from the first creator spotlight
       if (!result.spotlight) {
         const first = lighting.spotlights[0]
         result.spotlight = {
           position: Array.isArray(first.position)
             ? first.position
-            : [first.position?.x || 0, first.position?.y || 0, first.position?.z || 0],
+            : [
+                first.position?.x || 0,
+                first.position?.y || 0,
+                first.position?.z || 0
+              ],
           color: first.color || '#ffffff',
           intensity: first.intensity ?? 1,
           volumetric: first.volumetric ?? false,
@@ -323,19 +397,30 @@ export class JSONParser {
       }
 
       // Store the full array so the engine can create real Three.js lights
-      result.dynamicLights = lighting.spotlights.map(s => ({
-        id: s.id || 'spot',
-        type: s.type || 'point', // 'point' | 'spot' | 'directional'
-        position: Array.isArray(s.position) ? s.position : [s.position?.x || 0, s.position?.y || 0, s.position?.z || 0],
-        target: s.target ? (Array.isArray(s.target) ? s.target : [s.target.x || 0, s.target.y || 0, s.target.z || 0]) : null,
-        color: s.color || '#ffffff',
-        intensity: s.intensity ?? 1,
-        angle: s.angle ?? 0.6,
-        penumbra: s.penumbra ?? 0.5,
-        distance: s.distance ?? 30,
-        decay: s.decay ?? 2,
-        castShadow: s.castShadow ?? false
-      }))
+      result.dynamicLights = lighting.spotlights
+        .filter((s) => !s.legacyVolumetricOnly)
+        .map((s) => ({
+          id: s.id || 'spot',
+          type: s.type || 'spot', // 'point' | 'spot' | 'directional'
+          position: Array.isArray(s.position)
+            ? s.position
+            : [s.position?.x || 0, s.position?.y || 0, s.position?.z || 0],
+          target: s.target
+            ? Array.isArray(s.target)
+              ? s.target
+              : [s.target.x || 0, s.target.y || 0, s.target.z || 0]
+            : null,
+          color:
+            typeof s.color === 'string'
+              ? s.color.replace(/^0x/, '#')
+              : (s.color ?? '#ffffff'),
+          intensity: s.intensity ?? 1,
+          angle: s.angle ?? 0.6,
+          penumbra: s.penumbra ?? 0.5,
+          distance: s.distance ?? 30,
+          decay: s.decay ?? 2,
+          castShadow: s.castShadow ?? false
+        }))
     }
 
     return result
@@ -368,12 +453,12 @@ export class JSONParser {
    * @returns {object} Vector3-compatible scale
    */
   normalizeScale(scale) {
-    if (!scale) return { x: 1, y: 1, z: 1 }
+    if (scale == null) return { x: 1, y: 1, z: 1 }
     if (typeof scale === 'number') {
       return { x: scale, y: scale, z: scale }
     }
     if (Array.isArray(scale)) {
-      return { x: scale[0] || 1, y: scale[1] || 1, z: scale[2] || 1 }
+      return { x: scale[0] ?? 1, y: scale[1] ?? 1, z: scale[2] ?? 1 }
     }
     return scale
   }
@@ -387,7 +472,7 @@ export class JSONParser {
    */
   getLocalizedString(value, language, fallback = 'en') {
     if (typeof value === 'string') return value
-    if (typeof value === 'object') {
+    if (value && typeof value === 'object') {
       return value[language] || value[fallback] || Object.values(value)[0] || ''
     }
     return ''

@@ -1,62 +1,117 @@
-/**
- * Export/Import utilities for story.json files
- */
 import type { StoryConfig } from '../state/types'
-import { normalizeStory } from './normalizeStory'
+import { normalizeStory } from './normalizeStory.ts'
+import { mediaPaths, mediaType } from './media.ts'
+import { storyDocument, assertValidStory } from './storyDocument.ts'
 
-/**
- * Export story config to a JSON file download
- */
-export function exportStoryJSON(story: StoryConfig, filename = 'story.json') {
-  const json = JSON.stringify(story, null, 2)
-  const blob = new Blob([json], { type: 'application/json' })
+export async function portableStory(
+  story: StoryConfig,
+  assets: Record<string, File> = {},
+  baseUrl = ''
+) {
+  const doc = storyDocument(story)
+  const embedded = { ...doc.embeddedAssets }
+  for (const [path, file] of Object.entries(assets))
+    embedded[path] = await fileDataURL(
+      new Blob([file], { type: mediaType(path, file.type) })
+    )
+  if (Object.keys(embedded).length) doc.embeddedAssets = embedded
+  const missing: string[] = []
+  for (const path of mediaPaths(doc)) {
+    if (embedded[path] || path.startsWith('data:')) continue
+    if (!baseUrl && !/^(https?:|blob:)/.test(path)) {
+      missing.push(path)
+      continue
+    }
+    try {
+      const url = /^(https?:|blob:)/.test(path)
+        ? path
+        : new URL(
+            (doc.project.assets.basePath || '') + path,
+            baseUrl.endsWith('/') ? baseUrl : baseUrl + '/'
+          ).href
+      const response = await fetch(url)
+      if (!response.ok) throw new Error('HTTP ' + response.status)
+      const file = await response.blob()
+      embedded[path] = await fileDataURL(
+        new Blob([file], { type: mediaType(path, file.type) })
+      )
+    } catch {
+      missing.push(path)
+    }
+  }
+  if (missing.length)
+    throw new Error(
+      'Missing media: ' +
+        missing.slice(0, 6).join(', ') +
+        (missing.length > 6 ? ' and ' + (missing.length - 6) + ' more' : '') +
+        '. Add these files in Media library or set the media folder URL. Your workspace is unchanged.'
+    )
+  if (Object.keys(embedded).length) doc.embeddedAssets = embedded
+  assertValidStory(doc)
+  return doc
+}
+export async function exportStoryJSON(
+  story: StoryConfig,
+  filename = 'story.json',
+  assets: Record<string, File> = {},
+  baseUrl = ''
+) {
+  const doc = await portableStory(story, assets, baseUrl)
+  const blob = new Blob([JSON.stringify(doc, null, 2)], {
+    type: 'application/json'
+  })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
   a.download = filename
   document.body.appendChild(a)
   a.click()
-  document.body.removeChild(a)
-  URL.revokeObjectURL(url)
+  a.remove()
+  return { url, filename, size: blob.size }
 }
-
-/**
- * Import a story.json file — automatically normalizes the external format
- * to the internal editor format.
- */
-export function importStoryJSON(): Promise<StoryConfig> {
+export function fileDataURL(file: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result))
+    reader.onerror = () => reject(new Error('Could not read media file.'))
+    reader.readAsDataURL(file)
+  })
+}
+export function importStoryJSON(): Promise<StoryConfig | null> {
   return new Promise((resolve, reject) => {
     const input = document.createElement('input')
     input.type = 'file'
-    input.accept = '.json'
-    input.onchange = async (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0]
-      if (!file) return reject(new Error('No file selected'))
+    input.accept = '.json,application/json'
+    input.hidden = true
+    document.body.appendChild(input)
+    input.oncancel = () => {
+      input.remove()
+      resolve(null)
+    }
+    input.onchange = async () => {
+      const file = input.files?.[0]
+      input.remove()
+      if (!file) return resolve(null)
       try {
-        const text = await file.text()
-        const raw = JSON.parse(text)
-        const story = normalizeStory(raw)
-        resolve(story)
-      } catch (err) {
-        reject(err)
+        const raw = JSON.parse(await file.text())
+        assertValidStory(raw)
+        resolve(normalizeStory(raw))
+      } catch (error) {
+        reject(error)
       }
     }
     input.click()
   })
 }
-
-/**
- * Export story + assets as a ZIP bundle (placeholder)
- */
-export async function exportStoryBundle(story: StoryConfig, _assetFiles: Record<string, File>) {
-  exportStoryJSON(story)
+export async function exportStoryBundle(
+  story: StoryConfig,
+  files: Record<string, File>
+) {
+  return exportStoryJSON(story, 'story.json', files)
 }
-
-/**
- * Generate an object URL for a local asset file
- */
-export function getAssetURL(assetFiles: Record<string, File>, path: string): string | null {
-  const file = assetFiles[path]
-  if (!file) return null
-  return URL.createObjectURL(file)
+export function getAssetURL(
+  files: Record<string, File>,
+  path: string
+): string | null {
+  return files[path] ? URL.createObjectURL(files[path]) : null
 }

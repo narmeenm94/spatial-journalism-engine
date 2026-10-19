@@ -1,3 +1,5 @@
+import { ToolTemplates } from '../ToolTemplates'
+import { WaypointEditor } from './WaypointEditor'
 /**
  * Lighting Editor - Configure scene-specific lighting modifiers, effects, particles
  */
@@ -30,6 +32,7 @@ export function LightingEditor() {
 
   return (
     <div style={{ padding: 12, overflow: 'auto', height: '100%' }}>
+      <ToolTemplates tool="lighting"/>
       <h4 style={{ color: 'var(--accent)', marginBottom: 12 }}>
         Lighting — {activeScene.title[useStore.getState().language] || activeScene.id}
       </h4>
@@ -85,6 +88,13 @@ export function LightingEditor() {
         />
       </div>
 
+      <hr style={{borderColor:'var(--border-color)',margin:'16px 0'}}/>
+      <h4>Timed light tour</h4><p>Guide attention through the room with a moving pool of light, independently of the camera.</p>
+      <label><input type="checkbox" checked={!!activeScene.lighting.walkingTour} onChange={e => updateStory(d => { const light=d.scenes.find(s => s.id===activeSceneId)!.lighting; if(e.target.checked) light.walkingTour={waypoints:[],dimLights:{ambient:.15,directional:.2,hemisphere:.15},endLights:{ambient:1,directional:1,hemisphere:1},guidanceText:{en:'Follow the light'}}; else delete light.walkingTour }, 'Toggle light tour')}/> Enable a light tour</label>
+      {activeScene.lighting.walkingTour && <><WaypointEditor label="Light tour" points={activeScene.lighting.walkingTour.waypoints} onChange={points => updateStory(d => { const tour=d.scenes.find(s => s.id===activeSceneId)!.lighting.walkingTour!; tour.waypoints=points.map((p) => ({...p,id:('id' in p ? String(p.id) : crypto.randomUUID()),intensity:('intensity' in p ? Number(p.intensity) : 2)})) }, 'Edit light tour')}/>
+      <label>Guidance text<input className="form-input" value={activeScene.lighting.walkingTour.guidanceText?.[useStore.getState().language] || ''} onChange={e => updateStory(d => { const tour=d.scenes.find(s => s.id===activeSceneId)!.lighting.walkingTour!; (tour.guidanceText ||= {})[useStore.getState().language]=e.target.value })}/></label>
+      {(['dimLights','endLights'] as const).map(group => <fieldset className="feature-item" key={group}><legend>{group==='dimLights' ? 'During the tour' : 'After the tour'}</legend>{(['ambient','directional','hemisphere'] as const).map(key => <label key={key}>{key}<input className="form-input" type="number" min="0" step="0.1" value={activeScene.lighting.walkingTour![group][key]} onChange={e => updateStory(d => { d.scenes.find(s => s.id===activeSceneId)!.lighting.walkingTour![group][key]=Math.max(0,Number(e.target.value)) })}/></label>)}</fieldset>)}
+      </>}
       {/* Flicker Effect */}
       <hr style={{ borderColor: 'var(--border-color)', margin: '12px 0' }} />
       <h5 style={{ color: 'var(--text-secondary)', marginBottom: 8 }}>Flicker Effect</h5>

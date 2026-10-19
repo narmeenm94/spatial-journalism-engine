@@ -6,19 +6,19 @@
 import { create } from 'zustand'
 import { produce, enablePatches, applyPatches, type Patch } from 'immer'
 import { v4 as uuid } from 'uuid'
+import { mediaType } from '../utils/media.ts'
 import type {
   StoryConfig,
   EditorState,
   Selection,
   TransformMode,
-  SceneConfig,
   CharacterConfig,
   VideoConfig,
   SubtitleEntry,
   InteractiveObjectConfig,
   SpotlightConfig,
   CameraKeyframe,
-  AudioConfig,
+  AudioConfig
 } from './types'
 
 enablePatches()
@@ -31,16 +31,16 @@ function createDefaultStory(): StoryConfig {
       version: '1.0',
       languages: ['en'],
       defaultLanguage: 'en',
-      modes: ['ar', '3d'],
+      modes: ['3d'],
       assets: {
         basePath: 'assets/',
         environment: '',
-        preload: [],
-      },
+        preload: []
+      }
     },
     environment: {
       scale: 1,
-      position: [0, 0, 0],
+      position: [0, 0, 0]
     },
     camera: {
       initialPosition: [0, 1.6, 3],
@@ -51,17 +51,21 @@ function createDefaultStory(): StoryConfig {
       buffer: 0.5,
       recenterPosition: [0, 1.6, 3],
       recenterRotation: [0, 0, 0],
-      guided: {},
+      guided: {}
     },
     lighting: {
       ambient: { color: '0x404040', intensity: 0.5 },
       directional: { color: '0xffffff', intensity: 0.8, position: [5, 10, 5] },
-      hemisphere: { skyColor: '0xffffff', groundColor: '0x444444', intensity: 0.4 },
+      hemisphere: {
+        skyColor: '0xffffff',
+        groundColor: '0x444444',
+        intensity: 0.4
+      }
     },
     rendering: {
       toneMapping: 'ACESFilmic',
       toneMappingExposure: 1.4,
-      fog: { type: 'exponential', color: '0xcccccc', density: 0.15 },
+      fog: { type: 'exponential', color: '0xcccccc', density: 0.15 }
     },
     particles: {
       enabled: false,
@@ -71,7 +75,10 @@ function createDefaultStory(): StoryConfig {
       opacity: 0.3,
       blending: 'AdditiveBlending',
       area: { minX: -2, maxX: 2, minY: -1.5, maxY: 1.5, minZ: 0, maxZ: 4 },
-      animation: { rotateY: 0.0001, driftY: { speed: 0.0005, resetThreshold: 3, resetPosition: 1 } },
+      animation: {
+        rotateY: 0.0001,
+        driftY: { speed: 0.0005, resetThreshold: 3, resetPosition: 1 }
+      }
     },
     scenes: [
       {
@@ -81,15 +88,15 @@ function createDefaultStory(): StoryConfig {
         subtitles: [],
         characters: [],
         videos: [],
-        lighting: {},
-      },
+        lighting: {}
+      }
     ],
     ending: {
       video: '',
       text: { en: '' },
       quotes: [],
       buttons: {},
-      triggerMode: 'audioEnd',
+      triggerMode: 'audioEnd'
     },
     ui: {
       homeScreen: {
@@ -97,24 +104,24 @@ function createDefaultStory(): StoryConfig {
         subtitle: { en: '' },
         backgroundImage: '',
         backgroundImageDesktop: '',
-        startButton: { en: 'Begin Experience' },
+        startButton: { en: 'Begin Experience' }
       },
       branding: {
         logo: '',
-        primaryColor: '#00B7FF',
+        primaryColor: '#24665b',
         font: 'sans-serif',
-        fontFiles: { woff2: '', woff: '' },
+        fontFiles: { woff2: '', woff: '' }
       },
       controls: {
         exploration: { en: 'Exploration' },
-        guided: { en: 'Guided' },
+        guided: { en: 'Guided' }
       },
       modes: {
         exploration: { en: 'Explore freely' },
-        guided: { en: 'Guided tour' },
-      },
+        guided: { en: 'Guided tour' }
+      }
     },
-    interactableObjects: [],
+    interactableObjects: []
   }
 }
 
@@ -133,7 +140,10 @@ interface UndoState {
 // ── Store Actions ──
 interface EditorActions {
   // Story mutations
-  updateStory: (updater: (draft: StoryConfig) => void, description?: string) => void
+  updateStory: (
+    updater: (draft: StoryConfig) => void,
+    description?: string
+  ) => void
   setStory: (story: StoryConfig) => void
   resetStory: () => void
 
@@ -151,40 +161,72 @@ interface EditorActions {
   // Character management
   addCharacter: (sceneId: string) => void
   removeCharacter: (sceneId: string, charId: string) => void
-  updateCharacter: (sceneId: string, charId: string, updates: Partial<CharacterConfig>) => void
+  updateCharacter: (
+    sceneId: string,
+    charId: string,
+    updates: Partial<CharacterConfig>
+  ) => void
 
   // Video management
   addVideo: (sceneId: string) => void
   removeVideo: (sceneId: string, videoId: string) => void
-  updateVideo: (sceneId: string, videoId: string, updates: Partial<VideoConfig>) => void
+  updateVideo: (
+    sceneId: string,
+    videoId: string,
+    updates: Partial<VideoConfig>
+  ) => void
 
   // Subtitle management
   addSubtitle: (sceneId: string) => void
   removeSubtitle: (sceneId: string, subId: string) => void
-  updateSubtitle: (sceneId: string, subId: string, updates: Partial<SubtitleEntry>) => void
+  updateSubtitle: (
+    sceneId: string,
+    subId: string,
+    updates: Partial<SubtitleEntry>
+  ) => void
 
   // Interactive objects
+  addSceneButton: (sceneId: string) => void
   addInteractiveObject: () => void
   removeInteractiveObject: (objId: string) => void
-  updateInteractiveObject: (objId: string, updates: Partial<InteractiveObjectConfig>) => void
+  updateInteractiveObject: (
+    objId: string,
+    updates: Partial<InteractiveObjectConfig>
+  ) => void
 
   // Spotlight management
   addSpotlight: (sceneId: string) => void
   removeSpotlight: (sceneId: string, spotId: string) => void
-  updateSpotlight: (sceneId: string, spotId: string, updates: Partial<SpotlightConfig>) => void
+  updateSpotlight: (
+    sceneId: string,
+    spotId: string,
+    updates: Partial<SpotlightConfig>
+  ) => void
 
   // Camera keyframes
-  addCameraKeyframe: (sceneId: string) => void
+  addCameraKeyframe: (sceneId: string, pose?: Partial<CameraKeyframe>) => void
   removeCameraKeyframe: (sceneId: string, kfId: string) => void
-  updateCameraKeyframe: (sceneId: string, kfId: string, updates: Partial<CameraKeyframe>) => void
+  updateCameraKeyframe: (
+    sceneId: string,
+    kfId: string,
+    updates: Partial<CameraKeyframe>
+  ) => void
 
   // Audio management
   addAudio: (sceneId: string) => void
   removeAudio: (sceneId: string, audioId: string) => void
-  updateAudio: (sceneId: string, audioId: string, updates: Partial<AudioConfig>) => void
+  updateAudio: (
+    sceneId: string,
+    audioId: string,
+    updates: Partial<AudioConfig>
+  ) => void
 
   // Timeline
   setTimelinePosition: (time: number) => void
+  stopPlayback: () => void
+  setMediaDuration: (path: string, duration: number) => void
+  setPlaybackLoading: (id: string, path: string | null) => void
+  setPlaybackIssue: (id: string, issue: string | null) => void
   setIsPlaying: (playing: boolean) => void
 
   // UI state
@@ -192,6 +234,7 @@ interface EditorActions {
   setShowGrid: (show: boolean) => void
   setShowAxes: (show: boolean) => void
   setShowBounds: (show: boolean) => void
+  setAudienceFullView: (full: boolean) => void
   setShowCameraPiP: (show: boolean) => void
   setShowCameraPath: (show: boolean) => void
   setLeftPanelWidth: (w: number) => void
@@ -229,16 +272,22 @@ export const useStore = create<Store>((set, get) => {
     transformMode: 'translate',
     timelinePosition: 0,
     isPlaying: false,
+    playbackPreview: false,
+    audienceFullView: false,
+    mediaDurations: {},
+    playbackIssues: {},
+    playbackLoading: {},
     language: 'en',
 
     leftPanelWidth: 260,
     rightPanelWidth: 300,
     bottomPanelHeight: 200,
     showGrid: true,
-    showAxes: true,
-    showBounds: true,
+    showAxes: false,
+    showBounds: false,
     showCameraPiP: false,
     showCameraPath: true,
+    previewCameraPath: false,
 
     assetFiles: {},
     assetsBaseUrl: '',
@@ -253,37 +302,69 @@ export const useStore = create<Store>((set, get) => {
 
       const nextStory = produce(
         state.story,
-        (draft) => { updater(draft) },
-        (p, ip) => { patches = p; inversePatches = ip }
+        (draft) => {
+          updater(draft)
+        },
+        (p, ip) => {
+          patches = p
+          inversePatches = ip
+        }
       )
 
+      if (!patches.length) return
       set({
         story: nextStory,
+        language: nextStory.project.languages.includes(state.language)
+          ? state.language
+          : nextStory.project.defaultLanguage,
         dirty: true,
         _history: {
-          past: [...state._history.past.slice(-50), { patches, inversePatches, description }],
-          future: [],
-        },
+          past: [
+            ...state._history.past.slice(-50),
+            { patches, inversePatches, description }
+          ],
+          future: []
+        }
       })
     },
 
     setStory: (story) => {
       set({
         story,
+        language: story.project.defaultLanguage || 'en',
+        assetFiles: {},
+        assetsBaseUrl: '',
+        timelinePosition: 0,
+        isPlaying: false,
+    playbackPreview: false,
+    audienceFullView: false,
+    mediaDurations: {},
+    playbackIssues: {},
+    playbackLoading: {},
         dirty: false,
         activeSceneId: story.scenes[0]?.id || null,
         selection: { type: 'none' },
-        _history: { past: [], future: [] },
+        _history: { past: [], future: [] }
       })
     },
 
     resetStory: () => {
       set({
         story: createDefaultStory(),
+        language: 'en',
+        assetFiles: {},
+        assetsBaseUrl: '',
+        timelinePosition: 0,
+        isPlaying: false,
+    playbackPreview: false,
+    audienceFullView: false,
+    mediaDurations: {},
+    playbackIssues: {},
+    playbackLoading: {},
         dirty: false,
         activeSceneId: 'scene1',
         selection: { type: 'none' },
-        _history: { past: [], future: [] },
+        _history: { past: [], future: [] }
       })
     },
 
@@ -293,11 +374,19 @@ export const useStore = create<Store>((set, get) => {
     setTransformMode: (mode) => set({ transformMode: mode }),
 
     // ── Scene management ──
-    setActiveScene: (sceneId) => set({ activeSceneId: sceneId, selection: { type: 'none' } }),
+    setActiveScene: (sceneId) =>
+      set({
+        activeSceneId: sceneId,
+        selection: { type: 'none' },
+        timelinePosition: 0,
+        isPlaying: false, playbackPreview: get().audienceFullView
+      }),
 
     addScene: () => {
       const state = get()
-      const num = state.story.scenes.length + 1
+      let num = state.story.scenes.length + 1
+      while (state.story.scenes.some((scene) => scene.id === `scene${num}`))
+        num++
       const newId = `scene${num}`
       state.updateStory((draft) => {
         draft.scenes.push({
@@ -307,7 +396,7 @@ export const useStore = create<Store>((set, get) => {
           subtitles: [],
           characters: [],
           videos: [],
-          lighting: {},
+          lighting: {}
         })
       }, `Add scene ${num}`)
       set({ activeSceneId: newId })
@@ -318,9 +407,20 @@ export const useStore = create<Store>((set, get) => {
       if (state.story.scenes.length <= 1) return
       state.updateStory((draft) => {
         draft.scenes = draft.scenes.filter((s) => s.id !== sceneId)
+        for (const scene of draft.scenes)
+          if (scene.nextScene === sceneId) delete scene.nextScene
+        for (const scene of draft.scenes) for (const button of scene.sceneButtons || [])
+          if (button.targetScene === sceneId) delete button.targetScene
+        if (draft.camera.guided) delete draft.camera.guided[sceneId]
+        if (draft.ending.triggerSceneId === sceneId)
+          delete draft.ending.triggerSceneId
       }, `Remove scene ${sceneId}`)
       set((s) => ({
-        activeSceneId: s.activeSceneId === sceneId ? s.story.scenes[0]?.id || null : s.activeSceneId,
+        selection: { type: 'none' },
+        activeSceneId:
+          s.activeSceneId === sceneId
+            ? s.story.scenes[0]?.id || null
+            : s.activeSceneId
       }))
     },
 
@@ -348,7 +448,7 @@ export const useStore = create<Store>((set, get) => {
           delay: 0,
           duration: 0,
           fadeIn: 3000,
-          fadeOut: 1000,
+          fadeOut: 1000
         })
       }, 'Add character')
       set({ selection: { type: 'character', sceneId, itemId: charId } })
@@ -386,7 +486,7 @@ export const useStore = create<Store>((set, get) => {
           rotation: [0, 0, 0],
           size: [2, 1.5],
           triggerTime: 0,
-          duration: 30,
+          duration: 30
         })
       }, 'Add video')
       set({ selection: { type: 'video', sceneId, itemId: videoId } })
@@ -422,7 +522,7 @@ export const useStore = create<Store>((set, get) => {
           id: subId,
           start: lastSub ? lastSub.end : 0,
           end: lastSub ? lastSub.end + 3 : 3,
-          text: { en: '' },
+          text: { en: '' }
         })
       }, 'Add subtitle')
     },
@@ -445,6 +545,25 @@ export const useStore = create<Store>((set, get) => {
       }, 'Update subtitle')
     },
 
+    addSceneButton: (sceneId) => {
+      const id = `button-${uuid().slice(0, 8)}`
+      get().updateStory(d => {
+        const scene = findScene(d, sceneId)
+        if (!scene) return
+        const p = d.camera.initialPosition, [x, y] = d.camera.initialRotation
+        const e = d.environment.position, scale = d.environment.scale || 1
+        scene.sceneButtons ??= []
+        scene.sceneButtons.push({
+          id, label: { [d.project.defaultLanguage]: 'Continue' }, appearance: 'text',
+          position: [(p[0] - 2 * Math.sin(y) - e[0]) / scale, (p[1] + 2 * Math.sin(x) * Math.cos(y) - e[1]) / scale, (p[2] - 2 * Math.cos(x) * Math.cos(y) - e[2]) / scale],
+          rotation: [0, 0, 0], scale: [0.25 / scale, 0.25 / scale, 0.25 / scale],
+          showWhen: 'start', pulse: true, depthTest: true,
+          color: '#171717', backgroundColor: '#f3d85e'
+        })
+      }, 'Add scene button')
+      set({ playbackPreview: false, isPlaying: false, audienceFullView: false, selection: { type: 'sceneButton', sceneId, itemId: id } })
+    },
+
     // ── Interactive objects ──
     addInteractiveObject: () => {
       const objId = `obj-${uuid().slice(0, 8)}`
@@ -454,11 +573,19 @@ export const useStore = create<Store>((set, get) => {
           id: objId,
           name: { en: 'New Object' },
           model: '',
-          original: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
-          transformed: { position: [0, 1, 0], rotation: [0, 0, 0], scale: [2, 2, 2] },
+          original: {
+            position: [0, 0, 0],
+            rotation: [0, 0, 0],
+            scale: [1, 1, 1]
+          },
+          transformed: {
+            position: [0, 1, 0],
+            rotation: [0, 0, 0],
+            scale: [2, 2, 2]
+          },
           hasInfoBox: false,
           infoBoxMessage: { en: '' },
-          enableRotation: false,
+          enableRotation: false
         })
       }, 'Add interactive object')
       set({ selection: { type: 'interactiveObject', itemId: objId } })
@@ -467,7 +594,9 @@ export const useStore = create<Store>((set, get) => {
     removeInteractiveObject: (objId) => {
       get().updateStory((draft) => {
         if (!draft.interactableObjects) return
-        draft.interactableObjects = draft.interactableObjects.filter((o) => o.id !== objId)
+        draft.interactableObjects = draft.interactableObjects.filter(
+          (o) => o.id !== objId
+        )
       }, 'Remove interactive object')
       set({ selection: { type: 'none' } })
     },
@@ -496,7 +625,7 @@ export const useStore = create<Store>((set, get) => {
           intensity: 1,
           angle: 0.5,
           penumbra: 0.5,
-          volumetric: false,
+          volumetric: false
         })
       }, 'Add spotlight')
       set({ selection: { type: 'spotlight', sceneId, itemId: spotId } })
@@ -506,7 +635,9 @@ export const useStore = create<Store>((set, get) => {
       get().updateStory((draft) => {
         const scene = findScene(draft, sceneId)
         if (!scene || !scene.lighting.spotlights) return
-        scene.lighting.spotlights = scene.lighting.spotlights.filter((s) => s.id !== spotId)
+        scene.lighting.spotlights = scene.lighting.spotlights.filter(
+          (s) => s.id !== spotId
+        )
       }, 'Remove spotlight')
       set({ selection: { type: 'none' } })
     },
@@ -522,20 +653,24 @@ export const useStore = create<Store>((set, get) => {
     },
 
     // ── Camera keyframes ──
-    addCameraKeyframe: (sceneId) => {
+    addCameraKeyframe: (sceneId, pose = {}) => {
       const kfId = `kf-${uuid().slice(0, 8)}`
       get().updateStory((draft) => {
         if (!draft.camera.guided) draft.camera.guided = {}
         if (!draft.camera.guided[sceneId]) draft.camera.guided[sceneId] = []
         const existing = draft.camera.guided[sceneId]
-        const lastTime = existing.length > 0 ? existing[existing.length - 1].time + 10 : 0
+        const lastTime =
+          existing.length > 0
+            ? Math.max(...existing.map((k) => k.time)) + 10
+            : 0
         existing.push({
-          id: kfId,
           time: lastTime,
           position: [...draft.camera.initialPosition],
           rotation: [...draft.camera.initialRotation],
           duration: 2000,
           easing: 'quadratic',
+          ...pose,
+          id: kfId
         })
       }, 'Add camera keyframe')
       set({ selection: { type: 'cameraKeyframe', sceneId, itemId: kfId } })
@@ -544,7 +679,9 @@ export const useStore = create<Store>((set, get) => {
     removeCameraKeyframe: (sceneId, kfId) => {
       get().updateStory((draft) => {
         if (!draft.camera.guided?.[sceneId]) return
-        draft.camera.guided[sceneId] = draft.camera.guided[sceneId].filter((k) => k.id !== kfId)
+        draft.camera.guided[sceneId] = draft.camera.guided[sceneId].filter(
+          (k) => k.id !== kfId
+        )
       }, 'Remove camera keyframe')
       set({ selection: { type: 'none' } })
     },
@@ -572,7 +709,7 @@ export const useStore = create<Store>((set, get) => {
           loop: false,
           autoplay: true,
           delay: 0,
-          duration: 0,
+          duration: 0
         })
       }, 'Add audio')
       set({ selection: { type: 'audio', sceneId, itemId: audioId } })
@@ -598,14 +735,29 @@ export const useStore = create<Store>((set, get) => {
     },
 
     // ── Timeline ──
-    setTimelinePosition: (time) => set({ timelinePosition: time }),
-    setIsPlaying: (playing) => set({ isPlaying: playing }),
+    setTimelinePosition: (time) => set({ timelinePosition: Number.isFinite(time) ? Math.max(0, time) : 0, playbackPreview: true }),
+    setIsPlaying: (playing) => set(playing ? { isPlaying: true, playbackPreview: true, showCameraPiP: true } : { isPlaying: false }),
+    stopPlayback: () => set({ isPlaying: false, playbackPreview: false, audienceFullView: false, timelinePosition: 0 }),
+    setMediaDuration: (path, duration) => { if (Number.isFinite(duration) && duration > 0 && get().mediaDurations[path] !== duration) set({ mediaDurations: { ...get().mediaDurations, [path]: duration } }) },
+    setPlaybackLoading: (id, path) => {
+      if ((get().playbackLoading[id] || null) === path) return
+      const loading = { ...get().playbackLoading }
+      if (path) loading[id] = path; else delete loading[id]
+      set({ playbackLoading: loading })
+    },
+    setPlaybackIssue: (id, issue) => {
+      if ((get().playbackIssues[id] || null) === issue) return
+      const issues = { ...get().playbackIssues }
+      if (issue) issues[id] = issue; else delete issues[id]
+      set({ playbackIssues: issues })
+    },
 
     // ── UI state ──
     setLanguage: (lang) => set({ language: lang }),
     setShowGrid: (show) => set({ showGrid: show }),
     setShowAxes: (show) => set({ showAxes: show }),
     setShowBounds: (show) => set({ showBounds: show }),
+    setAudienceFullView: (full) => set(full ? { audienceFullView: true, showCameraPiP: true, playbackPreview: true } : { audienceFullView: false }),
     setShowCameraPiP: (show) => set({ showCameraPiP: show }),
     setShowCameraPath: (show) => set({ showCameraPath: show }),
     setLeftPanelWidth: (w) => set({ leftPanelWidth: w }),
@@ -621,10 +773,17 @@ export const useStore = create<Store>((set, get) => {
       const restoredStory = applyPatches(state.story, last.inversePatches)
       set({
         story: restoredStory,
+        dirty: true,
+        selection: { type: 'none' },
+        activeSceneId: restoredStory.scenes.some(
+          (s) => s.id === state.activeSceneId
+        )
+          ? state.activeSceneId
+          : restoredStory.scenes[0]?.id || null,
         _history: {
           past: past.slice(0, -1),
-          future: [last, ...future],
-        },
+          future: [last, ...future]
+        }
       })
     },
 
@@ -636,10 +795,17 @@ export const useStore = create<Store>((set, get) => {
       const restoredStory = applyPatches(state.story, next.patches)
       set({
         story: restoredStory,
+        dirty: true,
+        selection: { type: 'none' },
+        activeSceneId: restoredStory.scenes.some(
+          (s) => s.id === state.activeSceneId
+        )
+          ? state.activeSceneId
+          : restoredStory.scenes[0]?.id || null,
         _history: {
           past: [...past, next],
-          future: future.slice(1),
-        },
+          future: future.slice(1)
+        }
       })
     },
 
@@ -649,7 +815,12 @@ export const useStore = create<Store>((set, get) => {
     // ── Asset management ──
     addAssetFile: (name, file) => {
       set((state) => ({
-        assetFiles: { ...state.assetFiles, [name]: file },
+        assetFiles: {
+          ...state.assetFiles,
+          [name]: new File([file], file.name, {
+            type: mediaType(name, file.type)
+          })
+        }
       }))
     },
     removeAssetFile: (name) => {
@@ -659,6 +830,6 @@ export const useStore = create<Store>((set, get) => {
       })
     },
     setAssetsBaseUrl: (url) => set({ assetsBaseUrl: url }),
-    clearAssetFiles: () => set({ assetFiles: {} }),
+    clearAssetFiles: () => set({ assetFiles: {} })
   }
 })

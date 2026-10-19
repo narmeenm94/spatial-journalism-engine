@@ -20,10 +20,13 @@ export class ParticleManager {
     this.scene = scene
     this.config = config
 
-    const count = config.count || 2000
-    const color = parseInt(config.color || '0xcccccc')
-    const size = config.size || 0.005
-    const opacity = config.opacity || 0.3
+    const count = config.count ?? 2000
+    const color = parseInt(
+      (config.color || 'cccccc').replace('#', '').replace('0x', ''),
+      16
+    )
+    const size = config.size ?? 0.005
+    const opacity = config.opacity ?? 0.3
 
     // Area defines the spawn volume
     const area = config.area || {}
@@ -34,25 +37,32 @@ export class ParticleManager {
     const offsetY = area.offsetY || 0
     const offsetZ = area.offsetZ || 0
 
+    const minX = area.minX ?? -width / 2 + offsetX,
+      maxX = area.maxX ?? width / 2 + offsetX
+    const minY = area.minY ?? -height + offsetY,
+      maxY = area.maxY ?? offsetY
+    const minZ = area.minZ ?? offsetZ,
+      maxZ = area.maxZ ?? depth + offsetZ
     const geometry = new THREE.BufferGeometry()
     const positions = new Float32Array(count * 3)
 
     for (let i = 0; i < count * 3; i += 3) {
-      positions[i] = Math.random() * width - (width / 2) + offsetX
-      positions[i + 1] = Math.random() * height - height + offsetY
-      positions[i + 2] = Math.random() * depth + offsetZ
+      positions[i] = Math.random() * (maxX - minX) + minX
+      positions[i + 1] = Math.random() * (maxY - minY) + minY
+      positions[i + 2] = Math.random() * (maxZ - minZ) + minZ
     }
 
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
 
     // Blending mode
     const blendingModes = {
-      'additive': THREE.AdditiveBlending,
-      'normal': THREE.NormalBlending,
-      'subtractive': THREE.SubtractiveBlending,
-      'multiply': THREE.MultiplyBlending
+      additive: THREE.AdditiveBlending,
+      normal: THREE.NormalBlending,
+      subtractive: THREE.SubtractiveBlending,
+      multiply: THREE.MultiplyBlending
     }
-    const blending = blendingModes[config.blending || 'additive'] || THREE.AdditiveBlending
+    const blending =
+      blendingModes[config.blending || 'additive'] || THREE.AdditiveBlending
 
     const material = new THREE.PointsMaterial({
       color: color,
@@ -77,10 +87,10 @@ export class ParticleManager {
     if (!this.particles) return
 
     const anim = this.config?.animation || {}
-    const rotationSpeed = anim.rotationSpeed || 0.0001
-    const driftSpeed = anim.driftSpeed || 0.0005
-    const resetHeight = anim.resetHeight || 3
-    const resetToHeight = anim.resetToHeight || 1
+    const rotationSpeed = anim.rotateY ?? anim.rotationSpeed ?? 0.0001
+    const driftSpeed = anim.driftY?.speed ?? anim.driftSpeed ?? 0.0005
+    const resetHeight = anim.driftY?.resetThreshold ?? anim.resetHeight ?? 3
+    const resetToHeight = anim.driftY?.resetPosition ?? anim.resetToHeight ?? 1
 
     // Slow rotation
     this.particles.rotation.y += rotationSpeed

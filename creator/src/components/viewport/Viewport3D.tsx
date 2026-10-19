@@ -3,7 +3,14 @@
  * Features: TransformControls, GLB model loading, selection, scene visualization,
  *           F-key focus, camera PiP preview.
  */
-import React, { useRef, useMemo, Suspense, useCallback, useEffect, useState } from 'react'
+import React, {
+  useRef,
+  useMemo,
+  Suspense,
+  useCallback,
+  useEffect,
+  useState
+} from 'react'
 import { Canvas, useThree, useFrame } from '@react-three/fiber'
 import {
   OrbitControls,
@@ -12,10 +19,21 @@ import {
   GizmoHelper,
   GizmoViewport,
   Html,
-  useGLTF,
+  useGLTF
 } from '@react-three/drei'
 import * as THREE from 'three'
+import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js'
 import { useStore } from '../../state/store'
+import type { CharacterConfig } from '../../state/types'
+import { characterOpacity } from '../../utils/playback'
+import { PlaybackVideo, PlaybackAudio } from './PlaybackMedia'
+import { PlaybackLighting } from './PlaybackLighting'
+import { SceneButton } from './SceneButton'
+import { sceneButtonTarget } from '../../../../engine/src/ui/sceneButtons.js'
+import { PlaybackOverlay } from './PlaybackOverlay'
+import { AudienceCameraOverlay } from './AudienceCameraOverlay'
+import { Icon } from '../Icon'
+import { sampleCameraPath } from '../../../../engine/src/controls/cameraPath.js'
 
 // Stable empty array to avoid infinite re-render loops in useStore selectors
 const EMPTY_KEYFRAMES: never[] = []
@@ -44,10 +62,16 @@ class ModelErrorBoundary extends React.Component<
 // ── Main Viewport Component ──
 // ══════════════════════════════════════════════
 export function Viewport3D() {
+  const audience = useStore(s => s.audienceFullView)
+  useEffect(() => {
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') useStore.getState().setAudienceFullView(false) }
+    window.addEventListener('keydown', escape)
+    return () => window.removeEventListener('keydown', escape)
+  }, [])
   return (
-    <div className="viewport-container">
+    <div className={"viewport-container" + (audience ? " audience-full-view" : "")}>
       <Canvas
-        camera={{ position: [3, 3, 3], fov: 60, near: 0.01, far: 1000 }}
+        camera={{ position: [6, 4.5, 7], fov: 60, near: 0.01, far: 1000 }}
         shadows
         gl={{ antialias: true, alpha: true }}
         onCreated={({ gl }) => {
@@ -59,14 +83,16 @@ export function Viewport3D() {
           <SceneContent />
         </Suspense>
       </Canvas>
+      <div id="editor-media" aria-hidden="true" style={{ position: 'absolute', width: 1, height: 1, opacity: 0, overflow: 'hidden', pointerEvents: 'none' }}/>
       <ViewportOverlays />
+      <PlaybackOverlay />
     </div>
   )
 }
 
 function LoadingIndicator() {
   return (
-    <Html center>
+    <Html zIndexRange={[10, 0]} center>
       <div style={{ color: '#00b7ff', fontSize: 14 }}>Loading viewport…</div>
     </Html>
   )
@@ -76,6 +102,8 @@ function LoadingIndicator() {
 // ── Scene Content — renders everything ──
 // ══════════════════════════════════════════════
 function SceneContent() {
+  const audience = useStore(s => s.audienceFullView)
+  const playbackPreview = useStore(s => s.playbackPreview)
   const showGrid = useStore((s) => s.showGrid)
   const showAxes = useStore((s) => s.showAxes)
   const showBounds = useStore((s) => s.showBounds)
@@ -85,6 +113,22 @@ function SceneContent() {
   const selection = useStore((s) => s.selection)
   const transformMode = useStore((s) => s.transformMode)
   const assetsBaseUrl = useStore((s) => s.assetsBaseUrl)
+  const assetFiles = useStore((s) => s.assetFiles)
+  const fileUrls = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(assetFiles).map(([path, file]) => [
+          path,
+          URL.createObjectURL(file)
+        ])
+      ),
+    [assetFiles]
+  )
+  useEffect(
+    () => () =>
+      Object.values(fileUrls).forEach((url) => URL.revokeObjectURL(url)),
+    [fileUrls]
+  )
   const setSelection = useStore((s) => s.setSelection)
   const updateStory = useStore((s) => s.updateStory)
   const updateCharacter = useStore((s) => s.updateCharacter)
@@ -94,7 +138,50 @@ function SceneContent() {
 
   const activeScene = story.scenes.find((s) => s.id === activeSceneId)
   const orbitRef = useRef<any>(null)
-  const { camera } = useThree()
+  const { camera, gl } = useThree()
+  useEffect(() => {
+    gl.toneMappingExposure = story.rendering?.toneMappingExposure ?? 1.4
+  }, [gl, story.rendering?.toneMappingExposure])
+
+  useEffect(() => {
+    const capture = (event: Event) => {
+      const { sceneId, time, kfId } = (event as CustomEvent).detail
+      if (sceneId !== useStore.getState().activeSceneId) return
+      camera.updateMatrixWorld(true)
+      const position = camera
+        .getWorldPosition(new THREE.Vector3())
+        .toArray() as [number, number, number]
+      const rotation = new THREE.Euler()
+        .setFromQuaternion(
+          camera.getWorldQuaternion(new THREE.Quaternion()),
+          'XYZ'
+        )
+        .toArray()
+        .slice(0, 3) as [number, number, number]
+      const store = useStore.getState()
+      if (kfId)
+        store.updateCameraKeyframe(sceneId, kfId, { position, rotation })
+      else store.addCameraKeyframe(sceneId, { position, rotation, time })
+      store.setShowCameraPiP(true)
+      store.setTimelinePosition(time + 2)
+    }
+    const view = (event: Event) => {
+      const { position, rotation } = (event as CustomEvent).detail
+      camera.position.fromArray(position)
+      camera.rotation.set(...(rotation as [number, number, number]))
+      camera.updateMatrixWorld(true)
+      orbitRef.current?.target
+        .copy(camera.position)
+        .add(camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(2))
+      orbitRef.current?.update()
+    }
+    window.addEventListener('sj-capture-camera', capture)
+    window.addEventListener('sj-view-camera', view)
+    return () => {
+      window.removeEventListener('sj-capture-camera', capture)
+      window.removeEventListener('sj-view-camera', view)
+    }
+  }, [camera])
 
   // ── Object refs for TransformControls ──
   const objectRefs = useRef(new Map<string, THREE.Object3D>())
@@ -107,6 +194,7 @@ function SceneContent() {
 
   const guardedSetSelection = useCallback(
     (sel: Parameters<typeof setSelection>[0]) => {
+      if (useStore.getState().audienceFullView) return
       if (gizmoJustDragged.current) return // Ignore clicks right after a gizmo drag
       setSelection(sel)
     },
@@ -133,12 +221,24 @@ function SceneContent() {
   // ── Model URL helper ──
   const getModelUrl = useCallback(
     (modelPath: string) => {
-      if (!assetsBaseUrl || !modelPath) return null
-      const base = assetsBaseUrl.endsWith('/') ? assetsBaseUrl : assetsBaseUrl + '/'
+      if (!modelPath) return null
+      if (fileUrls[modelPath]) return fileUrls[modelPath]
+      if (story.embeddedAssets?.[modelPath])
+        return story.embeddedAssets[modelPath]
+      if (/^(https?:|data:|blob:)/i.test(modelPath)) return modelPath
+      if (!assetsBaseUrl) return null
+      const base = assetsBaseUrl.endsWith('/')
+        ? assetsBaseUrl
+        : assetsBaseUrl + '/'
       const assetBase = story.project.assets.basePath || ''
-      return `${base}${assetBase}${modelPath}`
+      return new URL(assetBase + modelPath, base).href
     },
-    [assetsBaseUrl, story.project.assets.basePath]
+    [
+      assetsBaseUrl,
+      story.project.assets.basePath,
+      story.embeddedAssets,
+      fileUrls
+    ]
   )
 
   // ── Handle transform end (mouseUp) ──
@@ -151,11 +251,21 @@ function SceneContent() {
     // doesn't accidentally select a different object behind it.
     gizmoJustDragged.current = true
     requestAnimationFrame(() => {
-      setTimeout(() => { gizmoJustDragged.current = false }, 50)
+      setTimeout(() => {
+        gizmoJustDragged.current = false
+      }, 50)
     })
 
-    const p: [number, number, number] = [obj.position.x, obj.position.y, obj.position.z]
-    const r: [number, number, number] = [obj.rotation.x, obj.rotation.y, obj.rotation.z]
+    const p: [number, number, number] = [
+      obj.position.x,
+      obj.position.y,
+      obj.position.z
+    ]
+    const r: [number, number, number] = [
+      obj.rotation.x,
+      obj.rotation.y,
+      obj.rotation.z
+    ]
     const s: [number, number, number] = [obj.scale.x, obj.scale.y, obj.scale.z]
 
     if (selection.type === 'environment') {
@@ -167,18 +277,76 @@ function SceneContent() {
       updateStory((d) => {
         d.camera.initialPosition = p
       }, 'Move camera')
-    } else if (selection.type === 'character' && selection.sceneId && selection.itemId) {
-      updateCharacter(selection.sceneId, selection.itemId, { position: p, rotation: r, scale: s })
-    } else if (selection.type === 'video' && selection.sceneId && selection.itemId) {
-      updateVideo(selection.sceneId, selection.itemId, { position: p, rotation: r })
-    } else if (selection.type === 'spotlight' && selection.sceneId && selection.itemId) {
+    } else if (
+      selection.type === 'character' &&
+      selection.sceneId &&
+      selection.itemId
+    ) {
+      updateCharacter(selection.sceneId, selection.itemId, {
+        position: p,
+        rotation: r,
+        scale: s
+      })
+    } else if (
+      selection.type === 'staticObject' &&
+      selection.sceneId &&
+      selection.itemId
+    ) {
+      updateStory((d) => {
+        const o = d.scenes
+          .find((c) => c.id === selection.sceneId)
+          ?.objects?.find((o) => o.id === selection.itemId)
+        if (o) {
+          o.position = p
+          o.rotation = r
+          o.scale = s
+        }
+      }, 'Transform object')
+    } else if (
+      selection.type === 'video' &&
+      selection.sceneId &&
+      selection.itemId
+    ) {
+      updateVideo(selection.sceneId, selection.itemId, {
+        position: p,
+        rotation: r
+      })
+    } else if (
+      selection.type === 'spotlight' &&
+      selection.sceneId &&
+      selection.itemId
+    ) {
       updateSpotlight(selection.sceneId, selection.itemId, { position: p })
+    } else if (
+      selection.type === 'cameraKeyframe' &&
+      selection.sceneId &&
+      selection.itemId
+    ) {
+      useStore
+        .getState()
+        .updateCameraKeyframe(selection.sceneId, selection.itemId, {
+          position: p,
+          rotation: r
+        })
+    } else if (selection.type === 'sceneButton' && selection.sceneId && selection.itemId) {
+      updateStory(d => {
+        const button = d.scenes.find(c => c.id === selection.sceneId)?.sceneButtons?.find(b => b.id === selection.itemId)
+        if (button) Object.assign(button, { position:p, rotation:r, scale:s })
+      }, 'Move scene button')
     } else if (selection.type === 'interactiveObject' && selection.itemId) {
       updateInteractiveObject(selection.itemId, {
-        original: { position: p, rotation: r, scale: s },
+        original: { position: p, rotation: r, scale: s }
       })
     }
-  }, [selectionKey, selection, updateStory, updateCharacter, updateVideo, updateSpotlight, updateInteractiveObject])
+  }, [
+    selectionKey,
+    selection,
+    updateStory,
+    updateCharacter,
+    updateVideo,
+    updateSpotlight,
+    updateInteractiveObject
+  ])
 
   // ── Focus on selected object (F key) ──
   useEffect(() => {
@@ -227,60 +395,68 @@ function SceneContent() {
     return () => window.removeEventListener('sj-focus-selected', handleFocus)
   }, [selectionKey, camera])
 
+  useEffect(() => {
+    const reset = () => {
+      camera.position.set(6, 4.5, 7)
+      orbitRef.current?.target.set(0, 0.8, 0)
+      orbitRef.current?.update()
+    }
+    window.addEventListener('sj-reset-view', reset)
+    return () => window.removeEventListener('sj-reset-view', reset)
+  }, [camera])
   const envModelUrl = getModelUrl(story.project.assets.environment)
 
   return (
     <>
-      {/* ── Lighting ── */}
-      <ambientLight
-        color={parseHexColor(story.lighting.ambient.color)}
-        intensity={story.lighting.ambient.intensity}
-      />
-      <directionalLight
-        color={parseHexColor(story.lighting.directional.color)}
-        intensity={story.lighting.directional.intensity}
-        position={story.lighting.directional.position}
-        castShadow
-      />
-      {story.lighting.hemisphere && (
-        <hemisphereLight
-          color={parseHexColor(story.lighting.hemisphere.skyColor)}
-          groundColor={parseHexColor(story.lighting.hemisphere.groundColor)}
-          intensity={story.lighting.hemisphere.intensity}
-        />
-      )}
+      <color attach="background" args={['#f4f4f2']} />
+      <PlaybackLighting story={story} chapter={activeScene}/>
+      {(activeScene?.audio || []).map(audio => <PlaybackAudio key={activeSceneId + audio.id} config={audio} url={getModelUrl(audio.file)}/>)}
 
-      {/* ── Grid ── */}
-      {showGrid && (
-        <Grid
-          args={[20, 20]}
-          position={[0, -0.01, 0]}
-          cellSize={0.5}
-          cellThickness={0.5}
-          cellColor="#333355"
-          sectionSize={2}
-          sectionThickness={1}
-          sectionColor="#444477"
-          fadeDistance={30}
-          infiniteGrid
-        />
-      )}
-      {showAxes && <axesHelper args={[3]} />}
-      {showBounds && <BoundsVisualization />}
-      {showCameraPath && activeSceneId && <CameraPathVisualization sceneId={activeSceneId} />}
-
+      {(story.ambience || []).filter(audio => !audio.objectId).map(audio => <PlaybackAudio key={'ambience:' + audio.id} config={{...audio,id:'ambience:' + audio.id}} url={getModelUrl(audio.file)}/>)}
+      <group userData={{ editorOnly: true }}>
+        {/* ── Grid ── */}
+        {showGrid && (
+          <Grid
+            args={[20, 20]}
+            position={[0, -0.01, 0]}
+            cellSize={0.5}
+            cellThickness={0.5}
+            cellColor="#ddddda"
+            sectionSize={2}
+            sectionThickness={1}
+            sectionColor="#c9c9c5"
+            fadeDistance={30}
+            infiniteGrid
+          />
+        )}
+        {showAxes && <axesHelper args={[3]} />}
+        {showBounds && <BoundsVisualization />}
+        {showCameraPath && activeSceneId && (
+          <CameraPathVisualization
+            sceneId={activeSceneId}
+            registerRef={registerRef}
+          />
+        )}
+      </group>
       {/* ── Environment ── */}
       <group
         ref={registerRef('environment')}
         position={story.environment.position}
-        scale={[story.environment.scale, story.environment.scale, story.environment.scale]}
+        scale={[
+          story.environment.scale,
+          story.environment.scale,
+          story.environment.scale
+        ]}
         onClick={(e) => {
           e.stopPropagation()
           guardedSetSelection({ type: 'environment' })
         }}
       >
         {envModelUrl ? (
-          <ModelErrorBoundary fallback={<EnvironmentPlaceholder />}>
+          <ModelErrorBoundary
+            key={envModelUrl}
+            fallback={<EnvironmentPlaceholder />}
+          >
             <Suspense fallback={<EnvironmentPlaceholder />}>
               <LoadedGLTF url={envModelUrl} />
             </Suspense>
@@ -290,164 +466,263 @@ function SceneContent() {
         )}
       </group>
 
-      {/* ── Scene Spotlights / Dynamic Lights ── */}
-      {(activeScene?.lighting.spotlights || []).map((spot) => {
-        const isSelected = selection.type === 'spotlight' && selection.itemId === spot.id
-        return (
-          <group
-            key={spot.id}
-            ref={registerRef(spot.id)}
-            position={spot.position}
-            onClick={(e) => {
-              e.stopPropagation()
-              guardedSetSelection({ type: 'spotlight', sceneId: activeSceneId!, itemId: spot.id })
-            }}
-          >
-            {/* Actual light — use appropriate intensity for physically-correct lighting */}
-            <pointLight
-              color={parseHexColor(spot.color)}
-              intensity={spot.intensity ?? 1}
-              distance={spot.distance ?? 30}
-              decay={2}
-            />
-            {/* Visual gizmo */}
-            <mesh>
-              <sphereGeometry args={[isSelected ? 0.1 : 0.08, 10, 10]} />
-              <meshBasicMaterial color={isSelected ? 0xffff00 : 0xffc400} wireframe={!isSelected} />
-            </mesh>
-            {/* Dashed "light cone" helper line pointing toward target */}
-            {spot.target && (
-              <line>
-                <bufferGeometry>
-                  <bufferAttribute
-                    attach="attributes-position"
-                    count={2}
-                    array={new Float32Array([0, 0, 0, spot.target[0] - spot.position[0], spot.target[1] - spot.position[1], spot.target[2] - spot.position[2]])}
-                    itemSize={3}
-                  />
-                </bufferGeometry>
-                <lineBasicMaterial color={0xffff00} transparent opacity={0.3} />
-              </line>
-            )}
-            <Label text={spot.id} color="#ffea00" y={0.18} />
-          </group>
-        )
-      })}
-
-      {/* ── Characters ── */}
-      {(activeScene?.characters || []).map((char) => {
-        const isSelected = selection.type === 'character' && selection.itemId === char.id
-        const modelUrl = getModelUrl(char.model)
-        return (
-          <group
-            key={char.id}
-            ref={registerRef(char.id)}
-            position={char.position}
-            rotation={char.rotation}
-            scale={char.scale}
-            onClick={(e) => {
-              e.stopPropagation()
-              guardedSetSelection({ type: 'character', sceneId: activeSceneId!, itemId: char.id })
-            }}
-          >
-            {modelUrl ? (
-              <ModelErrorBoundary fallback={<CharacterPlaceholder selected={isSelected} />}>
-                <Suspense fallback={<CharacterPlaceholder selected={isSelected} />}>
-                  <LoadedGLTF url={modelUrl} />
-                </Suspense>
-              </ModelErrorBoundary>
-            ) : (
-              <CharacterPlaceholder selected={isSelected} />
-            )}
-            <Label text={char.id} color="#2ed573" y={0.6} />
-          </group>
-        )
-      })}
-
-      {/* ── Videos ── */}
-      {(activeScene?.videos || []).map((vid) => {
-        const isSelected = selection.type === 'video' && selection.itemId === vid.id
-        return (
-          <group
-            key={vid.id}
-            ref={registerRef(vid.id)}
-            position={vid.position}
-            rotation={vid.rotation}
-            onClick={(e) => {
-              e.stopPropagation()
-              guardedSetSelection({ type: 'video', sceneId: activeSceneId!, itemId: vid.id })
-            }}
-          >
-            <mesh>
-              <planeGeometry args={vid.size} />
-              <meshStandardMaterial
-                color="#ff4757"
-                transparent
-                opacity={isSelected ? 0.5 : 0.2}
-                side={THREE.DoubleSide}
+      <group
+        position={story.environment.position}
+        scale={story.environment.scale}
+      >
+        {/* ── Scene Spotlights / Dynamic Lights ── */}
+        {(activeScene?.lighting.spotlights || []).map((spot) => {
+          const isSelected =
+            selection.type === 'spotlight' && selection.itemId === spot.id
+          return (
+            <group
+              key={spot.id}
+              ref={registerRef(spot.id)}
+              position={spot.position}
+              onClick={(e) => {
+                e.stopPropagation()
+                guardedSetSelection({
+                  type: 'spotlight',
+                  sceneId: activeSceneId!,
+                  itemId: spot.id
+                })
+              }}
+            >
+              {/* Actual light — use appropriate intensity for physically-correct lighting */}
+              <pointLight
+                color={parseHexColor(spot.color)}
+                intensity={spot.intensity ?? 1}
+                distance={spot.distance ?? 30}
+                decay={2}
               />
-            </mesh>
-            {/* Show a screen-like border */}
-            <lineSegments>
-              <edgesGeometry args={[new THREE.PlaneGeometry(...vid.size)]} />
-              <lineBasicMaterial color={isSelected ? '#ff4757' : '#663333'} />
-            </lineSegments>
-            <Label text={vid.id} color="#ff4757" y={vid.size[1] / 2 + 0.15} />
-          </group>
-        )
-      })}
+              {/* Visual gizmo */}
+              <group userData={{ editorOnly: true }}>
+              <mesh>
+                <sphereGeometry args={[isSelected ? 0.1 : 0.08, 10, 10]} />
+                <meshBasicMaterial
+                  color={isSelected ? 0xffff00 : 0xffc400}
+                  wireframe={!isSelected}
+                />
+              </mesh>
+              {/* Dashed "light cone" helper line pointing toward target */}
+              {spot.target && (
+                <line>
+                  <bufferGeometry>
+                    <bufferAttribute
+                      attach="attributes-position"
+                      args={[
+                        new Float32Array([
+                          0,
+                          0,
+                          0,
+                          spot.target[0] - spot.position[0],
+                          spot.target[1] - spot.position[1],
+                          spot.target[2] - spot.position[2]
+                        ]),
+                        3
+                      ]}
+                    />
+                  </bufferGeometry>
+                  <lineBasicMaterial
+                    color={0xffff00}
+                    transparent
+                    opacity={0.3}
+                  />
+                </line>
+              )}
+              <Label text={spot.id} color="#ffea00" y={0.18} />
+              </group>
+            </group>
+          )
+        })}
 
-      {/* ── Interactive Objects ── */}
-      {(story.interactableObjects || []).map((obj) => {
-        const isSelected = selection.type === 'interactiveObject' && selection.itemId === obj.id
-        const modelUrl = getModelUrl(obj.model)
-        return (
-          <group
-            key={obj.id}
-            ref={registerRef(obj.id)}
-            position={obj.original.position}
-            rotation={obj.original.rotation}
-            scale={obj.original.scale}
-            onClick={(e) => {
-              e.stopPropagation()
-              guardedSetSelection({ type: 'interactiveObject', itemId: obj.id })
-            }}
-          >
-            {modelUrl ? (
-              <ModelErrorBoundary fallback={<ObjectPlaceholder selected={isSelected} />}>
-                <Suspense fallback={<ObjectPlaceholder selected={isSelected} />}>
-                  <LoadedGLTF url={modelUrl} />
-                </Suspense>
-              </ModelErrorBoundary>
-            ) : (
-              <ObjectPlaceholder selected={isSelected} />
-            )}
-            <Label text={obj.id} color="#ffa502" y={0.15} />
-          </group>
-        )
-      })}
+        {(activeScene?.objects || []).map((obj) => {
+          const url = getModelUrl(obj.model)
+          return (
+            <group
+              key={obj.id}
+              ref={registerRef(obj.id)}
+              position={obj.position}
+              rotation={obj.rotation}
+              scale={obj.scale}
+              onClick={(e) => {
+                e.stopPropagation()
+                guardedSetSelection({
+                  type: 'staticObject',
+                  sceneId: activeSceneId!,
+                  itemId: obj.id
+                })
+              }}
+            >
+              {url ? (
+                <ModelErrorBoundary
+                  key={url}
+                  fallback={
+                    <ObjectPlaceholder selected={selection.itemId === obj.id} />
+                  }
+                >
+                  <Suspense fallback={null}>
+                    <LoadedGLTF url={url} />
+                  </Suspense>
+                </ModelErrorBoundary>
+              ) : (
+                <ObjectPlaceholder selected={selection.itemId === obj.id} />
+              )}
+            </group>
+          )
+        })}
+        {(activeScene?.sceneButtons || []).map(button => <SceneButton key={button.id} config={button} register={registerRef(button.id)} resolve={getModelUrl} onSelect={() => guardedSetSelection({type:'sceneButton',sceneId:activeSceneId!,itemId:button.id})}/>)}
+        {/* ── Characters ── */}
+        {(activeScene?.characters || []).map((char) => {
+          const isSelected =
+            selection.type === 'character' && selection.itemId === char.id
+          const modelUrl = getModelUrl(char.model)
+          return (
+            <group
+              key={char.id}
+              ref={registerRef(char.id)}
+              position={char.position}
+              rotation={char.rotation}
+              scale={char.scale}
+              onClick={(e) => {
+                e.stopPropagation()
+                guardedSetSelection({
+                  type: 'character',
+                  sceneId: activeSceneId!,
+                  itemId: char.id
+                })
+              }}
+            >
+              {modelUrl ? (
+                <ModelErrorBoundary
+                  key={modelUrl}
+                  fallback={<CharacterPlaceholder selected={isSelected} />}
+                >
+                  <Suspense
+                    fallback={<CharacterPlaceholder selected={isSelected} />}
+                  >
+                    <LoadedGLTF url={modelUrl} character={char} />
+                  </Suspense>
+                </ModelErrorBoundary>
+              ) : (
+                <CharacterPlaceholder selected={isSelected} />
+              )}
+              <Label text={char.id} color="#2ed573" y={0.6} />
+            </group>
+          )
+        })}
 
+        {/* ── Videos ── */}
+        {(activeScene?.videos || []).map((vid) => {
+          const isSelected =
+            selection.type === 'video' && selection.itemId === vid.id
+          return (
+            <group
+              key={vid.id}
+              ref={registerRef(vid.id)}
+              position={vid.position}
+              rotation={vid.rotation}
+              onClick={(e) => {
+                e.stopPropagation()
+                guardedSetSelection({
+                  type: 'video',
+                  sceneId: activeSceneId!,
+                  itemId: vid.id
+                })
+              }}
+            >
+              <PlaybackVideo config={vid} url={getModelUrl(vid.url)} />
+              <group visible={!playbackPreview} userData={{ editorOnly: true }}>
+              <mesh>
+                <planeGeometry args={vid.size} />
+                <meshStandardMaterial
+                  color="#ff4757"
+                  transparent
+                  opacity={isSelected ? 0.5 : 0.2}
+                  side={THREE.DoubleSide}
+                />
+              </mesh>
+              {/* Show a screen-like border */}
+              <lineSegments>
+                <edgesGeometry args={[new THREE.PlaneGeometry(...vid.size)]} />
+                <lineBasicMaterial color={isSelected ? '#ff4757' : '#663333'} />
+              </lineSegments>
+              <Label text={vid.id} color="#ff4757" y={vid.size[1] / 2 + 0.15} />
+              </group>
+            </group>
+          )
+        })}
+
+        {/* ── Interactive Objects ── */}
+        {(story.interactableObjects || []).map((obj) => {
+          const isSelected =
+            selection.type === 'interactiveObject' &&
+            selection.itemId === obj.id
+          const modelUrl = getModelUrl(obj.model)
+          return (
+            <group
+              key={obj.id}
+              ref={registerRef(obj.id)}
+              position={obj.original.position}
+              rotation={obj.original.rotation}
+              scale={obj.original.scale}
+              onClick={(e) => {
+                e.stopPropagation()
+                guardedSetSelection({
+                  type: 'interactiveObject',
+                  itemId: obj.id
+                })
+              }}
+            >
+              {modelUrl ? (
+                <ModelErrorBoundary
+                  key={modelUrl}
+                  fallback={<ObjectPlaceholder selected={isSelected} />}
+                >
+                  <Suspense
+                    fallback={<ObjectPlaceholder selected={isSelected} />}
+                  >
+                    <LoadedGLTF url={modelUrl} />
+                  </Suspense>
+                </ModelErrorBoundary>
+              ) : (
+                <ObjectPlaceholder selected={isSelected} />
+              )}
+              <Label text={obj.id} color="#ffa502" y={0.15} />
+            </group>
+          )
+        })}
+      </group>
       {/* ── Camera Marker (selectable + movable) ── */}
-      <CameraMarker registerRef={registerRef} gizmoJustDragged={gizmoJustDragged} />
+      <CameraMarker
+        registerRef={registerRef}
+        gizmoJustDragged={gizmoJustDragged}
+      />
 
       {/* ── Camera PiP (renders story camera viewfinder when camera is selected) ── */}
       <CameraPiP />
 
       {/* ── Transform Controls (attaches to the selected object) ── */}
       <ActiveTransformGizmo
-        selectionKey={selectionKey}
+        selectionKey={playbackPreview ? null : selectionKey}
         objectRefs={objectRefs}
         mode={transformMode}
         onEnd={handleTransformEnd}
       />
 
       {/* ── Orbit Controls ── */}
-      <OrbitControls ref={orbitRef} makeDefault enableDamping dampingFactor={0.1} />
+      <OrbitControls
+        ref={orbitRef}
+        makeDefault
+        enabled={!audience}
+        enableDamping
+        dampingFactor={0.1}
+      />
 
       {/* ── Gizmo Helper ── */}
-      <GizmoHelper alignment="bottom-right" margin={[60, 60]}>
+      {!audience && <GizmoHelper renderPriority={2} alignment="top-right" margin={[45, 45]}>
         <GizmoViewport labelColor="white" axisHeadScale={0.8} />
-      </GizmoHelper>
+      </GizmoHelper>}
     </>
   )
 }
@@ -460,7 +735,7 @@ function ActiveTransformGizmo({
   selectionKey,
   objectRefs,
   mode,
-  onEnd,
+  onEnd
 }: {
   selectionKey: string | null
   objectRefs: React.MutableRefObject<Map<string, THREE.Object3D>>
@@ -504,21 +779,50 @@ function ActiveTransformGizmo({
   if (!targetObj) return null
 
   return (
-    <TransformControls
-      ref={controlsRef}
-      object={targetObj}
-      mode={mode as 'translate' | 'rotate' | 'scale'}
-      size={0.8}
-    />
+    <group userData={{ editorOnly: true }}>
+      <TransformControls
+        ref={controlsRef}
+        object={targetObj}
+        mode={mode as 'translate' | 'rotate' | 'scale'}
+        size={0.8}
+      />
+    </group>
   )
 }
 
 // ══════════════════════════════════════════════
 // ── GLB Model Loader ──
 // ══════════════════════════════════════════════
-function LoadedGLTF({ url }: { url: string }) {
-  const { scene } = useGLTF(url)
-  const clone = useMemo(() => scene.clone(), [scene])
+function LoadedGLTF({ url, character }: { url: string; character?: CharacterConfig }) {
+  const { scene, animations } = useGLTF(url)
+  const clone = useMemo(() => {
+    const object = cloneSkeleton(scene)
+    if (character) object.traverse(child => {
+      if (!(child instanceof THREE.Mesh)) return
+      const copy = (m: THREE.Material) => { const material = m.clone(); material.transparent = true; material.depthWrite = false; return material }
+      child.material = Array.isArray(child.material) ? child.material.map(copy) : copy(child.material)
+    })
+    return object
+  }, [scene, !!character])
+  const mixer = useMemo(() => new THREE.AnimationMixer(clone), [clone])
+  useEffect(() => {
+    if (!character?.animation || !animations.length) return
+    const clip = animations.find(a => a.name === character.animation) || animations[0]
+    const action = mixer.clipAction(clip); action.play()
+    return () => { mixer.stopAllAction(); mixer.uncacheRoot(clone) }
+  }, [mixer, clone, animations, character?.animation])
+  useEffect(() => () => { if (character) clone.traverse(child => {
+    if (child instanceof THREE.Mesh) (Array.isArray(child.material) ? child.material : [child.material]).forEach(m => m.dispose())
+  }) }, [clone])
+  useFrame(() => {
+    if (!character) return
+    const state = useStore.getState()
+    const opacity = state.playbackPreview ? characterOpacity(character, state.timelinePosition) : character.opacity ?? .7
+    clone.visible = opacity > 0
+    // Absolute sampling makes pauses and backwards scrubbing deterministic.
+    mixer.setTime(state.playbackPreview ? Math.max(0, state.timelinePosition - (character.delay || 0) / 1000) : 0)
+    clone.traverse(child => { if (child instanceof THREE.Mesh) (Array.isArray(child.material) ? child.material : [child.material]).forEach(m => { m.opacity = opacity }) })
+  })
   return <primitive object={clone} />
 }
 
@@ -530,11 +834,16 @@ function EnvironmentPlaceholder() {
     <group>
       <mesh>
         <boxGeometry args={[4, 3, 6]} />
-        <meshStandardMaterial color="#334455" transparent opacity={0.08} wireframe />
+        <meshStandardMaterial
+          color="#334455"
+          transparent
+          opacity={0.08}
+          wireframe
+        />
       </mesh>
-      <Html center>
+      <Html zIndexRange={[10, 0]} center>
         <div style={{ color: '#556677', fontSize: 11, whiteSpace: 'nowrap' }}>
-          Set assets URL to load environment
+          Loading your space…
         </div>
       </Html>
     </group>
@@ -547,12 +856,20 @@ function CharacterPlaceholder({ selected }: { selected: boolean }) {
       {/* Head */}
       <mesh position={[0, 0.55, 0]}>
         <sphereGeometry args={[0.1, 8, 8]} />
-        <meshStandardMaterial color="#2ed573" transparent opacity={selected ? 0.9 : 0.4} />
+        <meshStandardMaterial
+          color="#2ed573"
+          transparent
+          opacity={selected ? 0.9 : 0.4}
+        />
       </mesh>
       {/* Body */}
       <mesh position={[0, 0.25, 0]}>
         <capsuleGeometry args={[0.1, 0.3, 8, 16]} />
-        <meshStandardMaterial color="#2ed573" transparent opacity={selected ? 0.9 : 0.4} />
+        <meshStandardMaterial
+          color="#2ed573"
+          transparent
+          opacity={selected ? 0.9 : 0.4}
+        />
       </mesh>
     </group>
   )
@@ -562,7 +879,11 @@ function ObjectPlaceholder({ selected }: { selected: boolean }) {
   return (
     <mesh>
       <boxGeometry args={[0.12, 0.12, 0.12]} />
-      <meshStandardMaterial color="#ffa502" transparent opacity={selected ? 0.9 : 0.4} />
+      <meshStandardMaterial
+        color="#ffa502"
+        transparent
+        opacity={selected ? 0.9 : 0.4}
+      />
     </mesh>
   )
 }
@@ -570,18 +891,30 @@ function ObjectPlaceholder({ selected }: { selected: boolean }) {
 // ══════════════════════════════════════════════
 // ── Label — floating HTML name tag ──
 // ══════════════════════════════════════════════
-function Label({ text, color, y }: { text: string; color: string; y: number }) {
+function Label({ text, color, y, selected = false }: { text: string; color: string; y: number; selected?: boolean }) {
+  const selection = useStore(s => s.selection)
+  const playback = useStore(s => s.playbackPreview || s.audienceFullView)
+  if (playback) return null
+  // Keep the scene readable: name the selected object, camera and route stops.
+  if (!selected && text !== 'Audience camera' && selection.itemId !== text) return null
   return (
-    <Html position={[0, y, 0]} center style={{ pointerEvents: 'none' }}>
+    <Html
+      zIndexRange={[10, 0]}
+      position={[0, y, 0]}
+      center
+      style={{ pointerEvents: 'none' }}
+    >
       <div
         style={{
-          color,
-          fontSize: 10,
+          color: '#34342a',
+          borderLeft: '3px solid ' + color,
+          fontSize: 11,
           whiteSpace: 'nowrap',
-          background: 'rgba(0,0,0,0.65)',
-          padding: '1px 5px',
-          borderRadius: 3,
-          fontFamily: 'Inter, sans-serif',
+          background: 'rgba(255,254,245,0.96)',
+          padding: '5px 9px',
+          borderRadius: 7,
+          boxShadow: '0 2px 8px #24241412',
+          fontFamily: 'Segoe UI, sans-serif'
         }}
       >
         {text}
@@ -595,7 +928,7 @@ function Label({ text, color, y }: { text: string; color: string; y: number }) {
 // ══════════════════════════════════════════════
 function CameraMarker({
   registerRef,
-  gizmoJustDragged,
+  gizmoJustDragged
 }: {
   registerRef: (id: string) => (node: THREE.Object3D | null) => void
   gizmoJustDragged: React.MutableRefObject<boolean>
@@ -608,31 +941,38 @@ function CameraMarker({
 
   return (
     <group
+      userData={{ editorOnly: true }}
       ref={registerRef('camera-marker')}
       position={pos}
       rotation={rot}
       onClick={(e) => {
         e.stopPropagation()
-        if (gizmoJustDragged.current) return
+        if (useStore.getState().audienceFullView) return
+      if (gizmoJustDragged.current) return
         setSelection({ type: 'camera' })
       }}
     >
       {/* Camera body */}
       <mesh rotation={[Math.PI, 0, 0]}>
         <coneGeometry args={[0.1, 0.22, 4]} />
-        <meshBasicMaterial color={isSelected ? 0xd980fa : 0xa55eea} wireframe />
+        <meshBasicMaterial color={isSelected ? 0x222222 : 0x666666} wireframe />
       </mesh>
       {/* Frustum / direction indicator */}
       <mesh position={[0, 0, -0.25]} rotation={[Math.PI / 2, 0, 0]}>
         <coneGeometry args={[0.18, 0.3, 4]} />
-        <meshBasicMaterial color={isSelected ? 0xd980fa : 0xa55eea} wireframe transparent opacity={0.4} />
+        <meshBasicMaterial
+          color={isSelected ? 0x222222 : 0x666666}
+          wireframe
+          transparent
+          opacity={0.4}
+        />
       </mesh>
       {/* Lens */}
       <mesh position={[0, 0, -0.15]}>
         <cylinderGeometry args={[0.04, 0.06, 0.08, 8]} />
-        <meshBasicMaterial color={isSelected ? 0xd980fa : 0xa55eea} wireframe />
+        <meshBasicMaterial color={isSelected ? 0x222222 : 0x666666} wireframe />
       </mesh>
-      <Label text="📷 Camera" color="#a55eea" y={0.25} />
+      <Label text="Audience camera" color="#666666" y={0.25} />
     </group>
   )
 }
@@ -655,13 +995,55 @@ function CameraMarker({
  */
 function CameraPiP() {
   const isActive = useStore((s) => s.showCameraPiP)
+  const fullView = useStore(s => s.audienceFullView)
   const camPos = useStore((s) => s.story.camera.initialPosition)
   const camRot = useStore((s) => s.story.camera.initialRotation)
 
   // Standalone camera — NOT added to the scene graph (no drei component needed)
   const pipCamRef = useRef<THREE.PerspectiveCamera>(
-    new THREE.PerspectiveCamera(60, 1.6, 0.01, 1000)
+    new THREE.PerspectiveCamera(75, 1.6, 0.01, 1000)
   )
+
+  const { gl: renderer, scene: world } = useThree()
+  useEffect(() => {
+    const canvas = renderer.domElement
+    let press: {x:number; y:number; id:number} | null = null
+    const audienceBounds = () => {
+      const state = useStore.getState(), rect = canvas.getBoundingClientRect()
+      if (!state.playbackPreview || (!state.showCameraPiP && !state.audienceFullView)) return null
+      const width = state.audienceFullView ? rect.width : Math.round(Math.min(rect.width * 0.28, 340))
+      const height = state.audienceFullView ? rect.height : Math.round(width / 1.6)
+      return { left:state.audienceFullView ? rect.left : rect.right - width - 12, top:state.audienceFullView ? rect.top : rect.bottom - height - 12, width, height }
+    }
+    const down = (event: PointerEvent) => {
+      const rect = audienceBounds()
+      if (!rect || event.clientX < rect.left || event.clientX > rect.left + rect.width || event.clientY < rect.top || event.clientY > rect.top + rect.height) return
+      press = {x:event.clientX,y:event.clientY,id:event.pointerId}
+      event.stopImmediatePropagation()
+    }
+    const up = (event: PointerEvent) => {
+      const start = press; press = null
+      if (!start) return
+      event.stopImmediatePropagation()
+      if (event.button > 0 || start.id !== event.pointerId || Math.hypot(event.clientX-start.x,event.clientY-start.y)>6) return
+      const rect = audienceBounds(); if (!rect) return
+      const ray = new THREE.Raycaster()
+      ray.setFromCamera(new THREE.Vector2((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1),pipCamRef.current)
+      const buttons: THREE.Object3D[] = []
+      world.traverseVisible(object => {if(object.userData.sceneButtonId) buttons.push(object)})
+      let hit: THREE.Object3D | null = ray.intersectObjects(buttons,true)[0]?.object || null
+      while(hit && !hit.userData.sceneButtonId) hit=hit.parent
+      const state=useStore.getState(), chapter=state.story.scenes.find(s=>s.id===state.activeSceneId)
+      const button=chapter?.sceneButtons?.find(b=>b.id===hit?.userData.sceneButtonId)
+      const target=button && chapter && sceneButtonTarget(button,state.story.scenes,chapter.id)
+      if(target) {state.setActiveScene(target); state.setIsPlaying(true)}
+    }
+    const cancel = () => {press=null}
+    canvas.addEventListener('pointerdown',down,true)
+    canvas.addEventListener('pointerup',up,true)
+    canvas.addEventListener('pointercancel',cancel)
+    return () => {canvas.removeEventListener('pointerdown',down,true);canvas.removeEventListener('pointerup',up,true);canvas.removeEventListener('pointercancel',cancel)}
+  }, [renderer, world])
 
   // Store the original clear color so we can restore it after PiP render
   const savedClearColor = useRef(new THREE.Color())
@@ -669,31 +1051,45 @@ function CameraPiP() {
   // Priority 1 → R3F hands rendering to us.
   // We ALWAYS render the main scene, then overlay the PiP when active.
   useFrame(({ gl, scene, camera, size }) => {
+    if (fullView) return
     // ── 1. Main scene render (always) ──
     gl.setRenderTarget(null)
     gl.setViewport(0, 0, size.width, size.height)
     gl.setScissorTest(false)
     gl.autoClear = true
     gl.render(scene, camera)
+  }, 1)
 
+  // Render after the orientation HUD so it cannot overwrite the audience view.
+  useFrame(({ gl, scene, size }) => {
     // ── 2. PiP overlay (only when active) ──
-    if (!isActive) return
+    if (!isActive && !fullView) return
 
     const pipCam = pipCamRef.current
 
     // Sync PiP camera to the story camera transform from the store
     pipCam.position.set(camPos[0], camPos[1], camPos[2])
     pipCam.rotation.set(camRot[0], camRot[1], camRot[2])
+    const state = useStore.getState()
+    if ((state.previewCameraPath || state.playbackPreview) && state.activeSceneId) {
+      const pose = sampleCameraPath(
+        state.story.camera.guided?.[state.activeSceneId] || [],
+        state.timelinePosition,
+        { position: camPos, rotation: camRot }
+      )
+      pipCam.position.fromArray(pose.position)
+      pipCam.quaternion.fromArray(pose.quaternion)
+    }
 
-    const pipW = Math.round(Math.min(size.width * 0.28, 340))
-    const pipH = Math.round(pipW / 1.6)
+    const pipW = fullView ? size.width : Math.round(Math.min(size.width * 0.28, 340))
+    const pipH = fullView ? size.height : Math.round(pipW / 1.6)
     pipCam.aspect = pipW / pipH
     pipCam.updateProjectionMatrix()
     // Force world matrix update since camera has no parent in scene graph
     pipCam.updateMatrixWorld(true)
 
-    const pipX = size.width - pipW - 12
-    const pipY = 12 // WebGL y=0 is bottom of canvas
+    const pipX = fullView ? 0 : size.width - pipW - 12
+    const pipY = fullView ? 0 : 12 // WebGL y=0 is bottom of canvas
 
     // Save the current clear color
     gl.getClearColor(savedClearColor.current)
@@ -705,16 +1101,29 @@ function CameraPiP() {
     gl.setScissorTest(true)
 
     // Clear PiP area with a dark background, then render
-    gl.setClearColor(0x1a1a2e, 1)
+    gl.setClearColor(0xf5f5f3, 1)
     gl.clear(true, true, true)
-    gl.render(scene, pipCam)
+    const hidden: THREE.Object3D[] = []
+    scene.traverse((object) => {
+      if (object.userData.editorOnly && object.visible) {
+        hidden.push(object)
+        object.visible = false
+      }
+    })
+    try {
+      gl.render(scene, pipCam)
+    } finally {
+      hidden.forEach((object) => {
+        object.visible = true
+      })
 
-    // Restore full viewport and clear color
-    gl.setScissorTest(false)
-    gl.setViewport(0, 0, size.width, size.height)
-    gl.setClearColor(savedClearColor.current, savedAlpha)
-    gl.autoClear = true
-  }, 1)
+      // Restore full viewport and clear color
+      gl.setScissorTest(false)
+      gl.setViewport(0, 0, size.width, size.height)
+      gl.setClearColor(savedClearColor.current, savedAlpha)
+      gl.autoClear = true
+    }
+  }, 3)
 
   // Nothing to add to the scene — the camera is standalone
   return null
@@ -730,17 +1139,17 @@ function BoundsVisualization() {
       [
         (bounds.minX + bounds.maxX) / 2,
         (bounds.minY + bounds.maxY) / 2,
-        (bounds.minZ + bounds.maxZ) / 2,
+        (bounds.minZ + bounds.maxZ) / 2
       ] as [number, number, number],
     [bounds]
   )
   const size = useMemo(
     () =>
-      [bounds.maxX - bounds.minX, bounds.maxY - bounds.minY, bounds.maxZ - bounds.minZ] as [
-        number,
-        number,
-        number,
-      ],
+      [
+        bounds.maxX - bounds.minX,
+        bounds.maxY - bounds.minY,
+        bounds.maxZ - bounds.minZ
+      ] as [number, number, number],
     [bounds]
   )
   return (
@@ -756,14 +1165,23 @@ function BoundsVisualization() {
 // ══════════════════════════════════════════════
 // ── Camera Path Visualization ──
 // ══════════════════════════════════════════════
-function CameraPathVisualization({ sceneId }: { sceneId: string }) {
-  const keyframes = useStore((s) => s.story.camera.guided?.[sceneId] ?? EMPTY_KEYFRAMES)
+function CameraPathVisualization({
+  sceneId,
+  registerRef
+}: {
+  sceneId: string
+  registerRef: (id: string) => (node: THREE.Object3D | null) => void
+}) {
+  const keyframes = useStore(
+    (s) => s.story.camera.guided?.[sceneId] ?? EMPTY_KEYFRAMES
+  )
   const setSelection = useStore((s) => s.setSelection)
   const selection = useStore((s) => s.selection)
 
   if (keyframes.length === 0) return null
 
-  const points = keyframes.map((kf) => new THREE.Vector3(...kf.position))
+  const ordered = [...keyframes].sort((a, b) => a.time - b.time)
+  const points = ordered.map((kf) => new THREE.Vector3(...kf.position))
 
   return (
     <group>
@@ -773,30 +1191,59 @@ function CameraPathVisualization({ sceneId }: { sceneId: string }) {
           <bufferGeometry>
             <bufferAttribute
               attach="attributes-position"
-              count={points.length}
-              array={new Float32Array(points.flatMap((p) => [p.x, p.y, p.z]))}
-              itemSize={3}
+              args={[
+                new Float32Array(points.flatMap((p) => [p.x, p.y, p.z])),
+                3
+              ]}
             />
           </bufferGeometry>
-          <lineBasicMaterial color={0xa55eea} transparent opacity={0.6} linewidth={2} />
+          <lineBasicMaterial
+            color={0x666666}
+            transparent
+            opacity={0.6}
+            linewidth={2}
+          />
         </line>
       )}
       {/* Keyframe spheres */}
-      {keyframes.map((kf, i) => {
-        const isSelected = selection.type === 'cameraKeyframe' && selection.itemId === kf.id
+      {ordered.map((kf, i) => {
+        const isSelected =
+          selection.type === 'cameraKeyframe' && selection.itemId === kf.id
         return (
-          <group key={kf.id}>
+          <group
+            key={kf.id}
+            ref={registerRef(kf.id)}
+            position={kf.position}
+            rotation={kf.rotation}
+          >
             <mesh
-              position={kf.position}
               onClick={(e) => {
                 e.stopPropagation()
                 setSelection({ type: 'cameraKeyframe', sceneId, itemId: kf.id })
+                useStore
+                  .getState()
+                  .setTimelinePosition(kf.time + (kf.duration ?? 2000) / 1000)
               }}
             >
               <sphereGeometry args={[isSelected ? 0.09 : 0.06, 12, 12]} />
-              <meshBasicMaterial color={isSelected ? 0xd980fa : 0xa55eea} />
+              <meshBasicMaterial color={isSelected ? 0x222222 : 0x666666} />
             </mesh>
-            <Label text={`KF${i + 1} t=${kf.time}s`} color="#a55eea" y={0.15} />
+            {isSelected && (
+              <arrowHelper
+                args={[
+                  new THREE.Vector3(0, 0, -1),
+                  new THREE.Vector3(),
+                  0.4,
+                  0xe7bc25
+                ]}
+              />
+            )}
+            <Label
+              selected={isSelected}
+              text={isSelected ? `View ${i + 1} · ${kf.time}s` : String(i + 1)}
+              color="#666666"
+              y={0.15}
+            />
           </group>
         )
       })}
@@ -815,6 +1262,7 @@ function ViewportOverlays() {
   const language = useStore((s) => s.language)
   const showCameraPiP = useStore((s) => s.showCameraPiP)
   const setShowCameraPiP = useStore((s) => s.setShowCameraPiP)
+  const fullView = useStore(s => s.audienceFullView)
 
   const activeScene = story.scenes.find((s) => s.id === activeSceneId)
   const sceneName = activeScene?.title[language] || activeSceneId || 'No Scene'
@@ -823,75 +1271,35 @@ function ViewportOverlays() {
     <>
       <div className="viewport-overlay">
         <span className="viewport-badge">{sceneName}</span>
-        {/* Camera PiP toggle */}
-        <button
-          onClick={() => setShowCameraPiP(!showCameraPiP)}
-          title={showCameraPiP ? 'Hide camera preview' : 'Show camera preview'}
-          style={{
-            marginLeft: 8,
-            background: showCameraPiP ? 'rgba(165,94,234,0.8)' : 'rgba(255,255,255,0.1)',
-            color: '#fff',
-            border: 'none',
-            borderRadius: 4,
-            padding: '2px 8px',
-            fontSize: 11,
-            cursor: 'pointer',
-          }}
-        >
-          📷 {showCameraPiP ? 'Hide PiP' : 'Show PiP'}
-        </button>
+        {!showCameraPiP && !fullView && <button className="btn btn-sm audience-show" onClick={() => setShowCameraPiP(true)} title="Show audience camera">
+          <Icon name="camera" size={16}/> Audience camera
+        </button>}
       </div>
       <div className="viewport-info">
         {selection.type !== 'none' && (
           <span>
             {selection.type}
-            {selection.itemId ? ` — ${selection.itemId}` : ''} &nbsp;|&nbsp;{' '}
-            <strong>{transformMode.toUpperCase()}</strong> (W / E / R) &nbsp;|&nbsp; <em>F</em> to
-            focus
+            {selection.itemId
+              ? ` — ${selection.itemId}`
+              : ''} &nbsp;|&nbsp; <strong>{transformMode.toUpperCase()}</strong>{' '}
+            (W / E / R) &nbsp;|&nbsp; <em>F</em> to focus
           </span>
         )}
         {selection.type === 'none' && (
-          <span style={{ opacity: 0.6 }}>Click an object to select it &nbsp;|&nbsp; <em>F</em> to focus</span>
+          <span style={{ opacity: 0.6 }}>
+            Click an object to select it &nbsp;|&nbsp; <em>F</em> to focus
+          </span>
         )}
       </div>
-      {/* PiP border + label overlay — positioned to match the WebGL viewport scissor area */}
-      {showCameraPiP && (
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 12,
-            right: 12,
-            width: 'min(28%, 340px)',
-            aspectRatio: '1.6',
-            border: '2px solid rgba(165,94,234,0.8)',
-            borderRadius: 4,
-            pointerEvents: 'none',
-            boxSizing: 'border-box',
-          }}
-        >
-          <div
-            style={{
-              position: 'absolute',
-              top: -20,
-              left: 0,
-              background: 'rgba(165,94,234,0.85)',
-              color: '#fff',
-              padding: '1px 8px',
-              borderRadius: '4px 4px 0 0',
-              fontSize: 10,
-              fontWeight: 600,
-              whiteSpace: 'nowrap',
-            }}
-          >
-            📷 Story Camera
-          </div>
-        </div>
-      )}
+      {(showCameraPiP || fullView) && <AudienceCameraOverlay fullView={fullView}/>}
     </>
   )
 }
 
 // ── Helpers ──
-function parseHexColor(str: string): number {
-  return parseInt(str.replace('0x', '').replace('#', ''), 16)
+function parseHexColor(str: string): THREE.Color {
+  return new THREE.Color().setHex(
+    parseInt(str.replace('0x', '').replace('#', ''), 16),
+    THREE.LinearSRGBColorSpace
+  )
 }

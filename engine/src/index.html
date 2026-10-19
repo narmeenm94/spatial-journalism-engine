@@ -1,23 +1,24 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <!-- Includes the MIT-licensed 8th Wall framework and the original project’s optional XR Engine binary. Copyright © 2026 Niantic Spatial, Inc. All rights reserved. Binary license: vendor/8thwall-slam/LICENSE. -->
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <title>Spatial Journalism Engine</title>
   
   <!-- Three.js -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="./vendor/three.min.js"></script>
   <!-- GLTFLoader addon (required for loading .glb models) -->
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+  <script src="./vendor/GLTFLoader.js"></script>
   <!-- OrbitControls for camera navigation -->
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="./vendor/OrbitControls.js"></script>
   <!-- Post-processing for outline/glow effects on interactive objects -->
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/OutlinePass.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+  <script src="./vendor/EffectComposer.js"></script>
+  <script src="./vendor/RenderPass.js"></script>
+  <script src="./vendor/OutlinePass.js"></script>
+  <script src="./vendor/ShaderPass.js"></script>
+  <script src="./vendor/CopyShader.js"></script>
   
   <!-- 8th Wall open-source libraries: loaded dynamically only in AR mode (see script below) -->
   
@@ -91,29 +92,13 @@
     var forceMode = params.get('mode') || null;
     var source = params.get('source') || null; // 'postMessage' when previewing from Creator
 
-    // Load 8th Wall scripts only in AR mode
-    if (forceMode === 'ar') {
-      var xrScripts = [
-        '/external/xrextras/xrextras.js',
-        '/external/landing-page/landing-page.js',
-        '/external/scripts/coaching-overlay.js'
-      ];
-      xrScripts.forEach(function(src) {
-        var s = document.createElement('script');
-        s.src = src;
-        document.head.appendChild(s);
-      });
-      var xrMain = document.createElement('script');
-      xrMain.src = '/external/xr/xr.js';
-      xrMain.async = true;
-      xrMain.dataset.preloadChunks = 'slam';
-      document.head.appendChild(xrMain);
-    }
+    // Native WebXR starts from the Begin button on supported devices.
   </script>
 
   <script>
+    window.addEventListener('pagehide', function(){ window.sjEngine?.dispose() });
     window.addEventListener('DOMContentLoaded', function() {
-      var storyUrl = params.get('story') || '/examples/shadows-rebuilt/story.json';
+      var storyUrl = params.get('story');
 
       console.log('Loading story:', storyUrl, forceMode ? '(mode: ' + forceMode + ')' : '');
 
@@ -122,6 +107,9 @@
         document.querySelector('.sj-loading-text').textContent = 'Waiting for story from Creator…';
         window.addEventListener('message', function handler(event) {
           if (!event.data || event.data.type !== 'loadStory') return;
+          var allowedOrigin = params.get('parentOrigin') || window.location.origin;
+          var hostWindow = window.opener || window.parent;
+          if (event.origin !== allowedOrigin || event.source !== hostWindow) return;
           window.removeEventListener('message', handler);
 
           document.querySelector('.sj-loading-text').textContent = 'Loading experience…';
@@ -156,6 +144,7 @@
             onError: function(error) {
               console.error('Engine error:', error);
               document.querySelector('.sj-loading-text').textContent = 'Error: ' + error.message;
+              (window.opener || window.parent).postMessage({type:'engineError',message:error.message},window.location.origin);
             }
           });
 
@@ -178,11 +167,22 @@
 
         // Tell the parent (Creator) that the engine iframe is ready to receive data
         if (window.parent !== window) {
-          window.parent.postMessage({ type: 'engineReady' }, '*');
+          window.parent.postMessage({ type: 'engineReady' }, params.get('parentOrigin') || window.location.origin);
         }
+        if (window.opener) window.opener.postMessage({type:'engineReady'},params.get('parentOrigin') || window.location.origin);
         return;
       }
 
+      // Open a portable story without needing a hosted URL.
+      if (!storyUrl) {
+        var loading=document.getElementById('sj-loading');loading.style.background='#f7f7f5';loading.style.color='#222222';loading.replaceChildren();
+        var title=document.createElement('h1');title.textContent='Step into a story';title.style.cssText='font:400 36px Segoe UI,sans-serif;letter-spacing:-1px;margin-bottom:16px';loading.appendChild(title);
+        var description=document.createElement('p');description.textContent='Open a Spatial Journalism JSON file to begin.';description.style.marginBottom='24px';loading.appendChild(description);
+        var picker=document.createElement('input');picker.type='file';picker.accept='.json,application/json';picker.hidden=true;loading.appendChild(picker);
+        var open=document.createElement('button');open.textContent='Open a story';open.style.cssText='padding:14px 24px;border:0;border-radius:8px;background:#ffdf4d;color:#191919;font:16px Segoe UI,sans-serif;cursor:pointer';open.onclick=function(){picker.click()};loading.appendChild(open);
+        picker.onchange=async function(){if(!picker.files[0])return;try{var raw=JSON.parse(await picker.files[0].text());var engine=new SJEngine({container:document.getElementById('sj-container'),onReady:function(){loading.style.display='none'},onError:function(e){description.textContent=e.message}});await engine.init(raw);window.sjEngine=engine}catch(e){description.textContent='Could not open this story: '+e.message}};
+        return;
+      }
       // ─── Standard mode: fetch story from URL ───
       if (typeof SJEngine !== 'undefined') {
         var engine = new SJEngine({

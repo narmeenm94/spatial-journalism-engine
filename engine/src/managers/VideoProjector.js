@@ -1,3 +1,4 @@
+import { videoVertexShader, videoFragmentShader } from '../visual-effects/videoShader.js'
 /**
  * VideoProjector - Advanced video projection with shader effects
  * Ported from Shadows of the Stabilisation Point
@@ -8,7 +9,8 @@ export class VideoProjector {
   constructor(scene) {
     this.scene = scene
     this.videos = new Map()
-    this.isIOS = /iPad|iPhone|iPod/.test(navigator.platform) ||
+    this.isIOS =
+      /iPad|iPhone|iPod/.test(navigator.platform) ||
       (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
   }
 
@@ -27,7 +29,8 @@ export class VideoProjector {
 
     // iOS requires video in DOM
     if (this.isIOS) {
-      video.style.cssText = 'width:1px;height:1px;position:absolute;top:0;left:0;opacity:0'
+      video.style.cssText =
+        'width:1px;height:1px;position:absolute;top:0;left:0;opacity:0'
       document.body.appendChild(video)
     }
 
@@ -56,27 +59,8 @@ export class VideoProjector {
           videoTexture: { value: videoTexture },
           opacity: { value: 0.0 }
         },
-        vertexShader: `
-          varying vec2 vUv;
-          void main() {
-            vUv = uv;
-            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-          }
-        `,
-        fragmentShader: `
-          uniform sampler2D videoTexture;
-          uniform float opacity;
-          varying vec2 vUv;
-          void main() {
-            vec4 videoColor = texture2D(videoTexture, vUv);
-            vec2 center = vec2(0.5, 0.5);
-            float dist = distance(vUv, center);
-            float vignette = smoothstep(0.8, 0.2, dist);
-            vec3 tintColor = vec3(0.9, 0.95, 1.0);
-            vec3 finalColor = videoColor.rgb * tintColor;
-            gl_FragColor = vec4(finalColor, videoColor.a * opacity * vignette);
-          }
-        `,
+        vertexShader: videoVertexShader,
+        fragmentShader: videoFragmentShader,
         transparent: true,
         blending: THREE.AdditiveBlending
       })
@@ -126,9 +110,24 @@ export class VideoProjector {
       videoTexture.needsUpdate = true
 
       if (multiWall && walls.length > 0) {
-        return this._createMultiWallProjection(videoId, videoElement, videoTexture, walls, size, opacity)
+        return this._createMultiWallProjection(
+          videoId,
+          videoElement,
+          videoTexture,
+          walls,
+          size,
+          opacity
+        )
       } else {
-        return this._createSingleProjection(videoId, videoElement, videoTexture, position, rotation, size, opacity)
+        return this._createSingleProjection(
+          videoId,
+          videoElement,
+          videoTexture,
+          position,
+          rotation,
+          size,
+          opacity
+        )
       }
     } catch (error) {
       console.error(`Error creating video projection ${videoId}:`, error)
@@ -139,7 +138,15 @@ export class VideoProjector {
   /**
    * Create single video projection
    */
-  _createSingleProjection(videoId, videoElement, videoTexture, position, rotation, size, opacity) {
+  _createSingleProjection(
+    videoId,
+    videoElement,
+    videoTexture,
+    position,
+    rotation,
+    size,
+    opacity
+  ) {
     const material = VideoProjector._createVideoShaderMaterial(videoTexture)
     const geometry = new THREE.PlaneGeometry(size[0], size[1])
     const mesh = new THREE.Mesh(geometry, material)
@@ -174,7 +181,14 @@ export class VideoProjector {
   /**
    * Create multi-wall video projection
    */
-  _createMultiWallProjection(videoId, videoElement, videoTexture, walls, size, opacity) {
+  _createMultiWallProjection(
+    videoId,
+    videoElement,
+    videoTexture,
+    walls,
+    size,
+    opacity
+  ) {
     const meshes = walls.map((wall, index) => {
       const material = VideoProjector._createVideoShaderMaterial(videoTexture)
       const geometry = new THREE.PlaneGeometry(size[0], size[1])
@@ -182,7 +196,7 @@ export class VideoProjector {
 
       mesh.position.set(wall.position.x, wall.position.y, wall.position.z)
       mesh.rotation.set(wall.rotation.x, wall.rotation.y, wall.rotation.z)
-      
+
       if (material.uniforms?.opacity) {
         material.uniforms.opacity.value = 0
       } else {
@@ -239,16 +253,17 @@ export class VideoProjector {
 
     const animate = () => {
       const elapsed = performance.now() - startTime
-      const progress = Math.min(elapsed / duration, 1)
+      const progress = duration <= 0 ? 1 : Math.min(elapsed / duration, 1)
 
       // Ease in-out
-      const easeProgress = progress < 0.5
-        ? 2 * progress * progress
-        : 1 - Math.pow(-2 * progress + 2, 2) / 2
+      const easeProgress =
+        progress < 0.5
+          ? 2 * progress * progress
+          : 1 - Math.pow(-2 * progress + 2, 2) / 2
 
       const currentOpacity = easeProgress * targetOpacity
 
-      videoData.meshes.forEach(mesh => {
+      videoData.meshes.forEach((mesh) => {
         if (mesh.material.uniforms?.opacity) {
           mesh.material.uniforms.opacity.value = currentOpacity
         } else {
@@ -277,7 +292,7 @@ export class VideoProjector {
 
       const material = videoData.material
       let startOpacity
-      
+
       if (material.uniforms?.opacity) {
         startOpacity = material.uniforms.opacity.value
       } else {
@@ -288,10 +303,10 @@ export class VideoProjector {
 
       const animate = () => {
         const elapsed = performance.now() - startTime
-        const progress = Math.min(elapsed / duration, 1)
+        const progress = duration <= 0 ? 1 : Math.min(elapsed / duration, 1)
         const currentOpacity = startOpacity * (1 - progress)
 
-        videoData.meshes.forEach(mesh => {
+        videoData.meshes.forEach((mesh) => {
           if (mesh.material.uniforms?.opacity) {
             mesh.material.uniforms.opacity.value = currentOpacity
           } else {
@@ -320,7 +335,7 @@ export class VideoProjector {
       videoData.element.currentTime = 0
       videoData.playing = false
 
-      videoData.meshes.forEach(mesh => {
+      videoData.meshes.forEach((mesh) => {
         if (mesh.material.uniforms?.opacity) {
           mesh.material.uniforms.opacity.value = 0
         } else {
@@ -346,7 +361,9 @@ export class VideoProjector {
   play(videoId) {
     const videoData = this.videos.get(videoId)
     if (videoData) {
-      videoData.element.play()
+      videoData.element
+        .play()
+        .catch((error) => console.warn('Video could not resume:', error))
     }
   }
 
@@ -378,7 +395,7 @@ export class VideoProjector {
       }
 
       // Remove meshes
-      videoData.meshes.forEach(mesh => {
+      videoData.meshes.forEach((mesh) => {
         this.scene.remove(mesh)
         mesh.geometry.dispose()
         mesh.material.dispose()

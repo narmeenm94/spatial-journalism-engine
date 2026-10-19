@@ -1,7 +1,7 @@
 /**
  * InteractionManager - Handles interactive 3D objects with raycasting
  * Ported from Shadows of the Stabilisation Point's interaction system
- * 
+ *
  * Features:
  * - Load interactive GLB models and place them in the room
  * - Raycasting for click/touch detection
@@ -23,6 +23,7 @@ export class InteractionManager {
    * @param {object} options.parser - JSON parser for path resolution
    */
   constructor(options = {}) {
+    this.onToggle = options.onToggle
     this.parentObject = options.parentObject
     this.camera = options.camera
     this.container = options.container || document.body
@@ -63,9 +64,16 @@ export class InteractionManager {
    * @param {Array} objectConfigs - Array of interactive object configurations
    */
   async loadFromConfig(objectConfigs) {
-    if (!objectConfigs || !Array.isArray(objectConfigs) || objectConfigs.length === 0) return
+    if (
+      !objectConfigs ||
+      !Array.isArray(objectConfigs) ||
+      objectConfigs.length === 0
+    )
+      return
 
-    console.log(`InteractionManager: Loading ${objectConfigs.length} interactive objects`)
+    console.log(
+      `InteractionManager: Loading ${objectConfigs.length} interactive objects`
+    )
 
     for (const config of objectConfigs) {
       try {
@@ -84,7 +92,8 @@ export class InteractionManager {
    * @param {object} config - Object configuration
    */
   async loadInteractiveObject(config) {
-    const modelUrl = this.parser?.resolvePath(config.model, this.basePath) || config.model
+    const modelUrl =
+      this.parser?.resolvePath(config.model, this.basePath) || config.model
 
     return new Promise((resolve, reject) => {
       if (!this.gltfLoader) {
@@ -110,10 +119,11 @@ export class InteractionManager {
           // Apply unlit MeshBasicMaterial for interactive objects (matching original)
           // This ensures objects are fully visible regardless of scene lighting
           model.traverse((child) => {
-            if (child.isMesh && child.material) {
+            if (config.unlit !== false && child.isMesh && child.material) {
               const texture = child.material.map || null
               child.material = new THREE.MeshBasicMaterial({
                 map: texture,
+                color: child.material.color || 0xffffff,
                 transparent: false,
                 side: child.material.side || THREE.FrontSide
               })
@@ -177,14 +187,18 @@ export class InteractionManager {
     }
 
     // Convert to normalized device coordinates
-    const rect = (this.container.querySelector('canvas') || this.container).getBoundingClientRect()
+    const rect = (
+      this.container.querySelector('canvas') || this.container
+    ).getBoundingClientRect()
     this.mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1
     this.mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1
 
     this.raycaster.setFromCamera(this.mouse, this.camera)
 
     // Get all interactive models
-    const interactiveModels = Array.from(this.objects.values()).map(o => o.model)
+    const interactiveModels = Array.from(this.objects.values()).map(
+      (o) => o.model
+    )
 
     // Intersect with all children of interactive models
     const intersects = this.raycaster.intersectObjects(interactiveModels, true)
@@ -221,17 +235,30 @@ export class InteractionManager {
       // Transform to "clicked" state
       const transformed = config.transformed || {}
       const pos = this._toVec3(transformed.position, model.position)
-      const rot = this._toVec3(transformed.rotation, { x: model.rotation.x, y: model.rotation.y, z: model.rotation.z })
-      const scl = this._toVec3(transformed.scale, { x: model.scale.x, y: model.scale.y, z: model.scale.z })
+      const rot = this._toVec3(transformed.rotation, {
+        x: model.rotation.x,
+        y: model.rotation.y,
+        z: model.rotation.z
+      })
+      const scl = this._toVec3(transformed.scale, {
+        x: model.scale.x,
+        y: model.scale.y,
+        z: model.scale.z
+      })
 
       this._animateTransform(model, pos, rot, scl, 500)
       objData.isClicked = true
+      this.onToggle?.(objectId, true)
 
       // Show info box if configured
       if (config.hasInfoBox) {
         objData.infoBoxVisible = true
-        const title = config.name?.[this.language] || config.name?.en || config.id
-        const message = config.infoBoxMessage?.[this.language] || config.infoBoxMessage?.en || ''
+        const title =
+          config.name?.[this.language] || config.name?.en || config.id
+        const message =
+          config.infoBoxMessage?.[this.language] ||
+          config.infoBoxMessage?.en ||
+          ''
         this._showInfoBox(title, message)
         this.activeObject = objData
       }
@@ -249,6 +276,7 @@ export class InteractionManager {
 
       this._animateTransform(model, pos, rot, scl, 500)
       objData.isClicked = false
+      this.onToggle?.(objectId, false)
       objData._rotationActive = false
 
       // Hide info box
@@ -264,17 +292,26 @@ export class InteractionManager {
    * Animate transform (position, rotation, scale) with easing
    */
   _animateTransform(model, targetPos, targetRot, targetScl, duration) {
-    const startPos = { x: model.position.x, y: model.position.y, z: model.position.z }
-    const startRot = { x: model.rotation.x, y: model.rotation.y, z: model.rotation.z }
+    const startPos = {
+      x: model.position.x,
+      y: model.position.y,
+      z: model.position.z
+    }
+    const startRot = {
+      x: model.rotation.x,
+      y: model.rotation.y,
+      z: model.rotation.z
+    }
     const startScl = { x: model.scale.x, y: model.scale.y, z: model.scale.z }
     const startTime = performance.now()
 
     const animate = () => {
       const elapsed = performance.now() - startTime
       const progress = Math.min(elapsed / duration, 1)
-      const ease = progress < 0.5
-        ? 2 * progress * progress
-        : 1 - Math.pow(-2 * progress + 2, 2) / 2
+      const ease =
+        progress < 0.5
+          ? 2 * progress * progress
+          : 1 - Math.pow(-2 * progress + 2, 2) / 2
 
       model.position.set(
         startPos.x + (targetPos.x - startPos.x) * ease,
@@ -325,10 +362,14 @@ export class InteractionManager {
       backdrop-filter: blur(10px);
     `
 
-    this.infoBox.innerHTML = `
-      <h3 style="margin: 0 0 8px 0; font-size: 18px; font-weight: 600;">${title}</h3>
-      ${content ? `<p style="margin: 0; font-size: 14px; opacity: 0.85; line-height: 1.4;">${content}</p>` : ''}
-    `
+    const heading = document.createElement('h3')
+    heading.textContent = title
+    this.infoBox.appendChild(heading)
+    if (content) {
+      const paragraph = document.createElement('p')
+      paragraph.textContent = content
+      this.infoBox.appendChild(paragraph)
+    }
 
     document.body.appendChild(this.infoBox)
 
@@ -371,7 +412,8 @@ export class InteractionManager {
     if (this.activeObject && this.infoBox) {
       const config = this.activeObject.config
       const title = config.name?.[language] || config.name?.en || config.id
-      const message = config.infoBoxMessage?.[language] || config.infoBoxMessage?.en || ''
+      const message =
+        config.infoBoxMessage?.[language] || config.infoBoxMessage?.en || ''
 
       const h3 = this.infoBox.querySelector('h3')
       const p = this.infoBox.querySelector('p')
@@ -385,7 +427,8 @@ export class InteractionManager {
    */
   _toVec3(value, defaultVal = { x: 0, y: 0, z: 0 }) {
     if (!value) return defaultVal
-    if (Array.isArray(value)) return { x: value[0] || 0, y: value[1] || 0, z: value[2] || 0 }
+    if (Array.isArray(value))
+      return { x: value[0] || 0, y: value[1] || 0, z: value[2] || 0 }
     return { x: value.x || 0, y: value.y || 0, z: value.z || 0 }
   }
 
@@ -399,7 +442,9 @@ export class InteractionManager {
   initOutlineEffect(scene, camera, renderer) {
     try {
       if (!THREE.EffectComposer || !THREE.RenderPass || !THREE.OutlinePass) {
-        console.warn('InteractionManager: Postprocessing classes not available, outline disabled')
+        console.warn(
+          'InteractionManager: Postprocessing classes not available, outline disabled'
+        )
         return
       }
 
@@ -426,7 +471,11 @@ export class InteractionManager {
 
       this.composer.addPass(this.outlinePass)
 
-      console.log('InteractionManager: Outline effect initialized with', this.outlinedModels.length, 'objects')
+      console.log(
+        'InteractionManager: Outline effect initialized with',
+        this.outlinedModels.length,
+        'objects'
+      )
     } catch (e) {
       console.warn('InteractionManager: Failed to create outline effect:', e)
       this.composer = null
@@ -484,7 +533,11 @@ export class InteractionManager {
    */
   update() {
     this.objects.forEach((objData) => {
-      if (objData.isClicked && objData._rotationActive && objData.config.enableRotation) {
+      if (
+        objData.isClicked &&
+        objData._rotationActive &&
+        objData.config.enableRotation
+      ) {
         objData.model.rotation.y += 0.005
       }
     })
@@ -529,7 +582,7 @@ export class InteractionManager {
             if (child.geometry) child.geometry.dispose()
             if (child.material) {
               if (Array.isArray(child.material)) {
-                child.material.forEach(m => m.dispose())
+                child.material.forEach((m) => m.dispose())
               } else {
                 child.material.dispose()
               }

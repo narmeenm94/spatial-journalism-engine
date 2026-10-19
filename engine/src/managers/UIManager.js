@@ -1,3 +1,5 @@
+import { installStoryFonts } from '../ui/storyFonts.js'
+import { renderDesignedScreen, mergeLaunchChoice, resolveScreenTarget, screenChoice } from '../ui/screenDesign.js'
 /**
  * UIManager - Handles UI generation and management from JSON configuration
  */
@@ -13,7 +15,7 @@ export class UIManager {
     this.elements = new Map()
     this.language = options.defaultLanguage || 'en'
     this.storyBaseUrl = options.storyBaseUrl || ''
-    
+
     this.onLanguageChange = options.onLanguageChange
     this.onModeSelect = options.onModeSelect
     this.onStart = options.onStart
@@ -28,12 +30,10 @@ export class UIManager {
     this.config = uiConfig
     this.projectConfig = projectConfig
     this.basePath = projectConfig.assets?.basePath || './assets/'
-    
-    // Load custom font if specified
-    if (uiConfig.branding?.fontFiles) {
-      this.loadCustomFont(uiConfig.branding)
-    }
-    
+
+    this.disposeFonts?.()
+    this.disposeFonts = installStoryFonts(uiConfig.branding, path => this.resolveAssetPath(path), family => console.warn('Could not load story font:', family))
+
     // Inject base styles
     this.injectBaseStyles()
   }
@@ -46,7 +46,12 @@ export class UIManager {
   resolveAssetPath(path) {
     if (!path) return path
     // Don't modify absolute URLs
-    if (path.startsWith('http://') || path.startsWith('https://')) {
+    if (
+      path.startsWith('http://') ||
+      path.startsWith('https://') ||
+      path.startsWith('data:') ||
+      path.startsWith('blob:')
+    ) {
       return path
     }
     // For absolute paths starting with /, return as-is
@@ -57,7 +62,7 @@ export class UIManager {
     const combinedPath = `${this.basePath}${path}`
     try {
       const resolved = new URL(combinedPath, this.storyBaseUrl)
-      return resolved.pathname
+      return resolved.href
     } catch (e) {
       // Fallback to combined path if URL resolution fails
       return combinedPath
@@ -68,32 +73,15 @@ export class UIManager {
    * Load custom font
    * @param {object} branding - Branding configuration
    */
-  loadCustomFont(branding) {
-    if (!branding.fontFiles) return
-
-    const woff2Path = branding.fontFiles.woff2 ? this.resolveAssetPath(branding.fontFiles.woff2) : null
-    const woffPath = branding.fontFiles.woff ? this.resolveAssetPath(branding.fontFiles.woff) : null
-
-    const style = document.createElement('style')
-    style.textContent = `
-      @font-face {
-        font-family: '${branding.font || 'CustomFont'}';
-        src: ${woff2Path ? `url('${woff2Path}') format('woff2'),` : ''}
-             ${woffPath ? `url('${woffPath}') format('woff')` : ''};
-        font-weight: normal;
-        font-style: normal;
-        font-display: swap;
-      }
-    `
-    document.head.appendChild(style)
-  }
 
   /**
    * Inject base styles
    */
   injectBaseStyles() {
     const primaryColor = this.config.branding?.primaryColor || '#ffffff'
-    const fontFamily = this.config.branding?.font || '-apple-system, BlinkMacSystemFont, sans-serif'
+    const fontFamily =
+      this.config.branding?.font ||
+      '-apple-system, BlinkMacSystemFont, sans-serif'
 
     const style = document.createElement('style')
     style.id = 'sj-engine-styles'
@@ -305,26 +293,28 @@ export class UIManager {
    * @returns {HTMLElement} Home screen element
    */
   createHomeScreen() {
+    if (this.config.screenDesigner?.enabled) return this.createDesignedHome()
+
     const homeConfig = this.config.homeScreen || {}
-    
+
     const screen = document.createElement('div')
     screen.className = 'sj-ui sj-screen sj-home-screen'
     screen.id = 'sj-home-screen'
-    
+
     // Set background image (resolve paths)
     if (homeConfig.backgroundImage) {
       const isMobile = window.innerWidth < 768
       const mobileBg = this.resolveAssetPath(homeConfig.backgroundImage)
-      const desktopBg = homeConfig.backgroundImageDesktop 
-        ? this.resolveAssetPath(homeConfig.backgroundImageDesktop) 
+      const desktopBg = homeConfig.backgroundImageDesktop
+        ? this.resolveAssetPath(homeConfig.backgroundImageDesktop)
         : mobileBg
       const bgImage = isMobile ? mobileBg : desktopBg
       screen.style.setProperty('--bg-image', `url(${bgImage})`)
     }
-    
+
     // Add background image style
-    const desktopBgUrl = homeConfig.backgroundImageDesktop 
-      ? `url(${this.resolveAssetPath(homeConfig.backgroundImageDesktop)})` 
+    const desktopBgUrl = homeConfig.backgroundImageDesktop
+      ? `url(${this.resolveAssetPath(homeConfig.backgroundImageDesktop)})`
       : 'var(--bg-image)'
     const bgStyle = document.createElement('style')
     bgStyle.textContent = `
@@ -382,7 +372,7 @@ export class UIManager {
 
     this.elements.set('homeScreen', screen)
     this.container.appendChild(screen)
-    
+
     return screen
   }
 
@@ -390,10 +380,44 @@ export class UIManager {
    * Create language toggle
    * @returns {HTMLElement} Language toggle element
    */
+  createDesignedHome() {
+    this.disposeDesignedHome?.()
+    const design=this.config.screenDesigner, shell=document.createElement('div'), canvas=document.createElement('div')
+    shell.id='sj-home-screen';shell.className='sj-ui';shell.style.cssText='position:absolute;inset:0;z-index:100;pointer-events:auto;'
+    canvas.style.cssText='width:100%;height:100%';shell.appendChild(canvas)
+    let screenId=design.homeScreenId, cleanup=()=>{}, launch={type:'start',mode:'auto'}
+    const media=matchMedia('(max-width:767px)')
+    this.drawDesignedHome=()=>{
+      if(shell.classList.contains('sj-hidden'))return
+      cleanup()
+      const screen=resolveScreenTarget(design,screenId,launch.navigation||'explore')
+      if(!screen)return
+      screenId=screen.id;launch={...launch,...screenChoice(screen,launch)}
+      const requestedPlatform=launch.mode!=='auto'?launch.mode:new URLSearchParams(window.location.search).get('mode')
+      const mobileDevice=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)||navigator.maxTouchPoints>1
+      const platform=requestedPlatform||(mobileDevice&&this.projectConfig.modes?.includes('ar')?'ar':this.projectConfig.modes?.length===1?this.projectConfig.modes[0]:'3d')
+      const requireStartGesture=platform==='vr'||(platform==='ar'&&this.projectConfig.ar?.backend!=='8thwall')
+      cleanup=renderDesignedScreen(canvas,screen,{requireStartGesture,navigation:launch.navigation,language:this.language,mobile:media.matches,resolveAsset:p=>this.resolveAssetPath(p),onAction:action=>{
+        launch=mergeLaunchChoice(launch,action)
+        if(action.type==='choice'){this.drawDesignedHome()}
+        else if(action.type==='language'){this.setLanguage(action.language)}
+        else if(action.type==='screen'){screenId=action.screenId;this.drawDesignedHome();canvas.querySelector('button')?.focus()}
+        else if(action.type==='link'){try{const url=new URL(action.url);if(['https:','http:'].includes(url.protocol))window.open(url.href,'_blank','noopener,noreferrer')}catch{}}
+        else { cleanup(); this.onStart?.({mode:launch.mode,navigation:launch.navigation}) }
+      }})
+    }
+    this.resetDesignedHome=()=>{launch={type:'start',mode:'auto'};screenId=design.homeScreenId;this.drawDesignedHome()}
+    media.addEventListener('change',this.drawDesignedHome)
+    this.disposeDesignedHome=()=>{media.removeEventListener('change',this.drawDesignedHome);cleanup();shell.remove()}
+    this.elements.set('homeScreen',shell);this.container.appendChild(shell);this.drawDesignedHome()
+    if(this.projectConfig.languages?.length>1&&!design.screens.some(s=>s.elements.some(e=>e.action?.type==='language')))shell.appendChild(this.createLanguageToggle())
+    return shell
+  }
+
   createLanguageToggle() {
     const toggle = document.createElement('div')
     toggle.className = 'sj-language-toggle'
-    
+
     this.projectConfig.languages.forEach((lang) => {
       const btn = document.createElement('button')
       btn.className = `sj-lang-btn ${lang === this.language ? 'active' : ''}`
@@ -401,7 +425,7 @@ export class UIManager {
       btn.onclick = () => this.setLanguage(lang)
       toggle.appendChild(btn)
     })
-    
+
     this.elements.set('languageToggle', toggle)
     return toggle
   }
@@ -412,29 +436,27 @@ export class UIManager {
    */
   createModeSelection() {
     const modes = this.projectConfig.modes || ['ar', '3d']
-    
+
     const container = document.createElement('div')
     container.className = 'sj-mode-selection'
     container.id = 'sj-mode-selection'
-    
+
     const modeLabels = {
-      ar: { icon: '📱', label: 'AR Mode' },
+      ar: { label: 'Phone AR' },
+      vr: { label: 'Headset VR' },
       '3d': { icon: '🖥️', label: '3D Mode' },
       guided: { icon: '🎬', label: 'Guided' },
       exploration: { icon: '🔍', label: 'Exploration' }
     }
-    
+
     modes.forEach((mode) => {
       const btn = document.createElement('button')
       btn.className = 'sj-mode-btn'
-      btn.innerHTML = `
-        <span class="sj-mode-icon">${modeLabels[mode]?.icon || '▶️'}</span>
-        <span>${modeLabels[mode]?.label || mode}</span>
-      `
+      btn.textContent = modeLabels[mode]?.label || mode
       btn.onclick = () => this.handleModeSelect(mode)
       container.appendChild(btn)
     })
-    
+
     this.elements.set('modeSelection', container)
     return container
   }
@@ -446,7 +468,7 @@ export class UIManager {
   createControls() {
     const controls = {}
     const controlsConfig = this.config.controls || {}
-    
+
     // Recenter button
     if (controlsConfig.showRecenter !== false) {
       const recenterBtn = document.createElement('button')
@@ -457,7 +479,7 @@ export class UIManager {
       controls.recenter = recenterBtn
       this.elements.set('recenterBtn', recenterBtn)
     }
-    
+
     // Skip button
     if (controlsConfig.showSkip !== false) {
       const skipBtn = document.createElement('button')
@@ -468,7 +490,7 @@ export class UIManager {
       controls.skip = skipBtn
       this.elements.set('skipBtn', skipBtn)
     }
-    
+
     return controls
   }
 
@@ -478,40 +500,43 @@ export class UIManager {
    */
   setLanguage(lang) {
     this.language = lang
-    
+
     // Update active button
     document.querySelectorAll('.sj-lang-btn').forEach((btn) => {
       btn.classList.toggle('active', btn.textContent.toLowerCase() === lang)
     })
-    
+
     // Update text content
     this.updateLocalizedText()
-    
+
     // Callback
     if (this.onLanguageChange) {
       this.onLanguageChange(lang)
     }
-    
+
     // Dispatch event
-    document.dispatchEvent(new CustomEvent('languageChanged', { detail: { language: lang } }))
+    document.dispatchEvent(
+      new CustomEvent('languageChanged', { detail: { language: lang } })
+    )
   }
 
   /**
    * Update all localized text
    */
   updateLocalizedText() {
+    if (this.config.screenDesigner?.enabled) { this.drawDesignedHome?.(); return }
     const homeConfig = this.config.homeScreen || {}
-    
+
     const title = document.getElementById('sj-title')
     if (title && homeConfig.title) {
       title.textContent = this.getText(homeConfig.title)
     }
-    
+
     const subtitle = document.getElementById('sj-subtitle')
     if (subtitle && homeConfig.subtitle) {
       subtitle.textContent = this.getText(homeConfig.subtitle)
     }
-    
+
     const startBtn = document.getElementById('sj-start-btn')
     if (startBtn) {
       startBtn.textContent = this.getText(homeConfig.startButtonText) || 'Start'
@@ -545,6 +570,7 @@ export class UIManager {
     const element = this.elements.get(elementId)
     if (element) {
       element.classList.remove('sj-hidden')
+      if(elementId==='homeScreen')this.resetDesignedHome?.()
       element.classList.add('sj-fade-in')
     }
   }
@@ -556,6 +582,7 @@ export class UIManager {
   hide(elementId) {
     const element = this.elements.get(elementId)
     if (element) {
+      element.querySelectorAll('video').forEach(video => video.pause())
       element.classList.add('sj-fade-out')
       setTimeout(() => {
         element.classList.add('sj-hidden')
@@ -584,17 +611,22 @@ export class UIManager {
     let loading = document.getElementById('sj-loading')
     if (!loading) {
       loading = document.createElement('div')
-      loading.className = 'sj-loading'
       loading.id = 'sj-loading'
-      loading.innerHTML = `
-        <div class="sj-loading-spinner"></div>
-        <div class="sj-loading-text">${message}</div>
-      `
       this.container.appendChild(loading)
-    } else {
-      loading.querySelector('.sj-loading-text').textContent = message
-      loading.classList.remove('sj-hidden')
     }
+    // The standalone file picker reuses this container without progress markup.
+    // Rebuild it when beginning playback instead of assuming a text node exists.
+    let text = loading.querySelector('.sj-loading-text')
+    if (!text) {
+      const spinner = document.createElement('div')
+      spinner.className = 'sj-loading-spinner'
+      text = document.createElement('div')
+      text.className = 'sj-loading-text'
+      loading.replaceChildren(spinner, text)
+    }
+    loading.className = 'sj-loading'
+    loading.style.display = 'flex'
+    text.textContent = message
   }
 
   /**
@@ -622,13 +654,15 @@ export class UIManager {
    * Clean up UI
    */
   dispose() {
+    this.disposeDesignedHome?.()
+    this.disposeFonts?.()
     this.elements.forEach((element) => {
       if (element.parentNode) {
         element.parentNode.removeChild(element)
       }
     })
     this.elements.clear()
-    
+
     // Remove injected styles
     const style = document.getElementById('sj-engine-styles')
     if (style) style.remove()

@@ -1,178 +1,298 @@
-/**
- * Asset Browser Panel - Drag-and-drop file import with thumbnail previews
- */
-import { useState, useCallback, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useStore } from '../../state/store'
-
-const ASSET_ICONS: Record<string, string> = {
-  glb: '🧊',
-  gltf: '🧊',
-  mp3: '🔊',
-  wav: '🔊',
-  mp4: '🎬',
-  webm: '🎬',
-  png: '🖼',
-  jpg: '🖼',
-  jpeg: '🖼',
-  svg: '🖼',
-  woff: '🔤',
-  woff2: '🔤',
-  ttf: '🔤',
+import { mediaPaths, mediaType } from '../../utils/media'
+import { Icon } from '../Icon'
+const kind = (name: string) =>
+  /\.(glb|gltf)$/i.test(name)
+    ? 'model'
+    : /\.(mp3|wav|ogg)$/i.test(name)
+      ? 'audio'
+      : /\.(mp4|webm)$/i.test(name)
+        ? 'video'
+        : /\.(png|jpe?g|webp|svg)$/i.test(name)
+          ? 'image'
+          : 'file'
+const icons: Record<string, string> = {
+  model: 'cube',
+  audio: 'audio',
+  video: 'video',
+  image: 'image',
+  file: 'folder'
 }
-
-function getExtension(name: string): string {
-  return name.split('.').pop()?.toLowerCase() || ''
-}
-
-function getAssetIcon(name: string): string {
-  return ASSET_ICONS[getExtension(name)] || '📄'
-}
-
-function getAssetType(name: string): string {
-  const ext = getExtension(name)
-  if (['glb', 'gltf'].includes(ext)) return 'model'
-  if (['mp3', 'wav', 'ogg'].includes(ext)) return 'audio'
-  if (['mp4', 'webm'].includes(ext)) return 'video'
-  if (['png', 'jpg', 'jpeg', 'svg', 'webp'].includes(ext)) return 'image'
-  if (['woff', 'woff2', 'ttf', 'otf'].includes(ext)) return 'font'
-  return 'other'
-}
-
 export function AssetBrowser() {
-  const assetFiles = useStore((s) => s.assetFiles)
-  const addAssetFile = useStore((s) => s.addAssetFile)
-  const removeAssetFile = useStore((s) => s.removeAssetFile)
-  const story = useStore((s) => s.story)
-  const updateStory = useStore((s) => s.updateStory)
-
-  const [dragOver, setDragOver] = useState(false)
-  const [filter, setFilter] = useState<string>('all')
-  const fileInputRef = useRef<HTMLInputElement>(null)
-
-  const handleFiles = useCallback(
-    (files: FileList) => {
-      Array.from(files).forEach((file) => {
-        // Use a type-based subdirectory as key so it matches story config paths
-        const type = getAssetType(file.name)
-        const subDir = type === 'model' ? 'models'
-          : type === 'audio' ? 'audio'
-          : type === 'video' ? 'video'
-          : type === 'image' ? 'images'
-          : type === 'font' ? 'fonts'
-          : 'assets'
-        const relativePath = `${subDir}/${file.name}`
-        addAssetFile(relativePath, file)
-
-        // Auto-add to preload list if it's a model
-        if (type === 'model' && file.name !== story.project.assets.environment) {
-          updateStory((d) => {
-            const modelPath = `models/${file.name}`
-            if (!d.project.assets.preload.includes(modelPath)) {
-              d.project.assets.preload.push(modelPath)
-            }
-          }, `Import ${file.name}`)
-        }
-      })
-    },
-    [addAssetFile, updateStory, story]
-  )
-
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault()
-      setDragOver(false)
-      if (e.dataTransfer.files.length > 0) {
-        handleFiles(e.dataTransfer.files)
-      }
-    },
-    [handleFiles]
-  )
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
-    setDragOver(true)
+  const files = useStore((s) => s.assetFiles),
+    embedded = useStore((s) => s.story.embeddedAssets),
+    story = useStore((s) => s.story),
+    baseUrl = useStore((s) => s.assetsBaseUrl)
+  const input = useRef<HTMLInputElement>(null),
+    [error, setError] = useState(''),
+    [drag, setDrag] = useState(false)
+  const [checks, setChecks] = useState<Record<string, string>>({})
+  const [checking, setChecking] = useState(false)
+  useEffect(() => setChecks({}), [baseUrl, story])
+  const names = [
+    ...new Set([
+      ...Object.keys(embedded || {}),
+      ...Object.keys(files),
+      ...mediaPaths(story)
+    ])
+  ]
+  const isLinked = (path: string) => !!baseUrl || /^(https?:|blob:)/.test(path)
+  const checkFiles = async () => {
+    setChecking(true)
+    const results: Record<string, string> = {}
+    await Promise.all(
+      names
+        .filter(
+          (path) =>
+            !files[path] && !embedded?.[path] && !path.startsWith('data:')
+        )
+        .map(async (path) => {
+          if (!isLinked(path)) {
+            results[path] = 'Needs a file or media folder'
+            return
+          }
+          try {
+            const url = /^(https?:|blob:)/.test(path)
+              ? path
+              : new URL(
+                  (story.project.assets.basePath || '') + path,
+                  baseUrl.endsWith('/') ? baseUrl : baseUrl + '/'
+                ).href
+            const response = await fetch(url, {
+              method: 'HEAD',
+              signal: AbortSignal.timeout(15000)
+            })
+            results[path] =
+              response.ok &&
+              !response.headers.get('content-type')?.includes('text/html')
+                ? 'Available'
+                : 'Unavailable · check media URL'
+          } catch {
+            results[path] = 'Could not verify · check URL or CORS'
+          }
+        })
+    )
+    setChecks(results)
+    setChecking(false)
   }
-
-  const assets = Object.entries(assetFiles).filter(([name]) => {
-    if (filter === 'all') return true
-    return getAssetType(name) === filter
-  })
-
+  const importFiles = (list: FileList) => {
+    setError('')
+    for (const file of Array.from(list)) {
+      if (/\.gltf$/i.test(file.name)) {
+        setError(
+          'Use a GLB model with textures included. Convert separate .gltf files to GLB before adding them.'
+        )
+        continue
+      }
+      const type = kind(file.name),
+        folder =
+          type === 'model'
+            ? 'models'
+            : type === 'image'
+              ? 'images'
+              : type === 'file'
+                ? 'files'
+                : type
+      const references = mediaPaths(useStore.getState().story).filter(
+        (p) => p.split('/').pop() === file.name
+      )
+      let path =
+          references.length === 1 ? references[0] : folder + '/' + file.name,
+        n = 2
+      while (
+        useStore.getState().assetFiles[path] ||
+        useStore.getState().story.embeddedAssets?.[path]
+      )
+        path = folder + '/' + n++ + '-' + file.name
+      const mime = mediaType(file.name, file.type)
+      useStore
+        .getState()
+        .addAssetFile(path, new File([file], file.name, { type: mime }))
+    }
+  }
+  const useAsset = (path: string, action: string) => {
+    const s = useStore.getState(),
+      id = s.activeSceneId
+    if (!id) return
+    if (action === 'space') {
+      s.updateStory((d) => {
+        d.project.assets.environment = path
+      }, 'Set space')
+      s.setSelection({ type: 'environment' })
+      return
+    }
+    if (action === 'cover') {
+      s.updateStory((d) => {
+        d.ui.homeScreen.backgroundImage = path
+      }, 'Set cover')
+      return
+    }
+    if (action === 'model') {
+      s.addCharacter(id)
+      s.updateCharacter(id, useStore.getState().selection.itemId!, {
+        model: path,
+        opacity: 1,
+        fadeIn: 0
+      })
+    }
+    if (action === 'audio') {
+      s.addAudio(id)
+      s.updateAudio(id, useStore.getState().selection.itemId!, { file: path })
+    }
+    if (action === 'video') {
+      s.addVideo(id)
+      s.updateVideo(id, useStore.getState().selection.itemId!, { url: path })
+    }
+  }
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* Filter tabs */}
-      <div className="tab-bar">
-        {['all', 'model', 'audio', 'video', 'image', 'font'].map((f) => (
-          <div
-            key={f}
-            className={`tab ${filter === f ? 'active' : ''}`}
-            onClick={() => setFilter(f)}
-          >
-            {f.charAt(0).toUpperCase() + f.slice(1)}
-          </div>
-        ))}
-      </div>
-
-      {/* Drop zone / asset grid */}
-      <div
-        style={{ flex: 1, overflow: 'auto', padding: 8 }}
-        onDrop={handleDrop}
-        onDragOver={handleDragOver}
-        onDragLeave={() => setDragOver(false)}
-      >
-        {assets.length === 0 ? (
-          <div
-            className={`drop-zone ${dragOver ? 'active' : ''}`}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <div style={{ fontSize: 28, marginBottom: 8 }}>📁</div>
-            <div>Drop files here or click to import</div>
-            <div style={{ fontSize: 11, marginTop: 4 }}>
-              GLB, MP3, MP4, PNG, WOFF, etc.
-            </div>
-          </div>
-        ) : (
-          <>
-            <div
-              className={`drop-zone ${dragOver ? 'active' : ''}`}
-              style={{ padding: 8, marginBottom: 8 }}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              + Add more assets
-            </div>
-            <div className="asset-grid">
-              {assets.map(([name, file]) => (
-                <div key={name} className="asset-item" title={name}>
-                  <span className="asset-icon">{getAssetIcon(name)}</span>
-                  <span className="asset-name">{file.name}</span>
-                  <button
-                    className="btn-icon btn-sm"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      removeAssetFile(name)
-                    }}
-                    style={{ fontSize: 10 }}
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* Hidden file input */}
+    <div
+      className="media-library"
+      onDragOver={(e) => {
+        e.preventDefault()
+        setDrag(true)
+      }}
+      onDragLeave={() => setDrag(false)}
+      onDrop={(e) => {
+        e.preventDefault()
+        setDrag(false)
+        importFiles(e.dataTransfer.files)
+      }}
+    >
       <input
-        ref={fileInputRef}
+        ref={input}
         type="file"
         multiple
-        style={{ display: 'none' }}
+        hidden
         onChange={(e) => {
-          if (e.target.files) handleFiles(e.target.files)
-          e.target.value = '' // Reset
+          if (e.target.files) importFiles(e.target.files)
+          e.target.value = ''
         }}
       />
+      <div className="media-topline">
+        <p>
+          {names.length
+            ? names.length + ' media files · local, embedded or linked'
+            : 'Your media, ready for the story'}
+        </p>
+        <button className="btn btn-sm" onClick={() => input.current?.click()}>
+          <Icon name="plus" size={14} />
+          Add media
+        </button>
+      </div>
+      <details className="media-sources">
+        <summary>
+          Media links & file check (
+          {
+            mediaPaths(story).filter(
+              (p) => !files[p] && !embedded?.[p] && !p.startsWith('data:')
+            ).length
+          }
+          )
+        </summary>
+        <label>
+          Media folder URL
+          <input
+            className="form-input"
+            aria-label="Media folder URL"
+            placeholder="https://your-site.example/story/"
+            value={baseUrl}
+            onChange={(e) =>
+              useStore.getState().setAssetsBaseUrl(e.target.value)
+            }
+          />
+        </label>
+        <p>
+          For an existing story, add its missing files here. Matching filenames
+          reconnect automatically. Export embeds reachable media in the JSON.
+        </p>
+        {mediaPaths(story)
+          .filter((p) => !files[p] && !embedded?.[p] && !p.startsWith('data:'))
+          .map((p) => (
+            <div key={p} className="missing-file">
+              {p}
+            </div>
+          ))}
+      </details>
+      <div className="media-topline">
+        <button className="btn btn-sm" disabled={checking} onClick={checkFiles}>
+          {checking ? 'Checking files…' : 'Check linked files'}
+        </button>
+        {Object.keys(checks).length > 0 && (
+          <p role="status">
+            {Object.values(checks).filter((v) => v === 'Available').length}{' '}
+            available ·{' '}
+            {Object.values(checks).filter((v) => v !== 'Available').length} need
+            attention
+          </p>
+        )}
+      </div>
+      {error && <p role="alert">{error}</p>}
+      {!names.length || drag ? (
+        <div className="media-drop">
+          <Icon name="folder" size={24} />
+          <h3>
+            {drag ? 'Drop your files here' : 'Bring your story into the room'}
+          </h3>
+          <p>
+            3D models, audio, video and images. Local files travel with your
+            exported JSON.
+          </p>
+          <button className="btn" onClick={() => input.current?.click()}>
+            Choose files
+          </button>
+        </div>
+      ) : (
+        <div className="media-list">
+          {names.map((path) => (
+            <article className="media-card" key={path}>
+              <Icon name={icons[kind(path)]} size={22} />
+              <strong title={path}>{path.split('/').pop()}</strong>
+              <small>
+                {files[path]
+                  ? (files[path].size / 1024 / 1024).toFixed(1) + ' MB'
+                  : embedded?.[path] || path.startsWith('data:')
+                    ? 'Included in story'
+                    : checks[path] ||
+                      (isLinked(path) ? 'Linked media' : 'Needs a file')}{' '}
+                · {kind(path)}
+              </small>
+              <div className="media-actions">
+                {kind(path) === 'model' ? (
+                  <>
+                    <button
+                      className="btn btn-sm"
+                      onClick={() => useAsset(path, 'space')}
+                    >
+                      Use as space
+                    </button>
+                    <button
+                      className="btn btn-sm"
+                      onClick={() => useAsset(path, 'model')}
+                    >
+                      Add to chapter
+                    </button>
+                  </>
+                ) : kind(path) === 'image' ? (
+                  <button
+                    className="btn btn-sm"
+                    onClick={() => useAsset(path, 'cover')}
+                  >
+                    Use as cover
+                  </button>
+                ) : ['audio', 'video'].includes(kind(path)) ? (
+                  <button
+                    className="btn btn-sm"
+                    onClick={() => useAsset(path, kind(path))}
+                  >
+                    Add to chapter
+                  </button>
+                ) : null}
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

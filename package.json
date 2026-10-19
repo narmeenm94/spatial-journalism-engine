@@ -8,8 +8,12 @@
     "build:prod": "webpack --config engine/webpack.config.js --mode production",
     "dev": "webpack serve --config engine/webpack.config.js",
     "generator": "npx serve generator -p 3001",
-    "test": "jest",
-    "lint": "eslint engine/src/**/*.js"
+    "test": "node --test tests/*.test.mjs",
+    "audit:story-contract": "node --experimental-strip-types scripts/audit-story-contract.mjs",
+    "lint": "eslint engine/src/**/*.js",
+    "build:studio": "npm run build:prod && npm --prefix creator run build",
+    "studio": "npm --prefix creator run dev",
+    "test:all": "npm test && npm --prefix creator test"
   },
   "repository": {
     "type": "git",
@@ -27,7 +31,9 @@
   "author": "Yle / Narmeen Marji",
   "license": "MIT",
   "dependencies": {
-    "ajv": "^8.12.0"
+    "@8thwall/engine": "0.1.0",
+    "ajv": "^8.12.0",
+    "three-runtime": "npm:three@0.128.0"
   },
   "devDependencies": {
     "@babel/core": "^7.23.0",

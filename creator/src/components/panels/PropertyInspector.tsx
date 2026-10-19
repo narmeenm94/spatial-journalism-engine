@@ -2,8 +2,12 @@
  * Property Inspector - Context-sensitive panel showing properties of the selected item
  * When nothing is selected, shows a project overview dashboard
  */
-import { useRef } from 'react'
+import { useRef, type ReactNode } from 'react'
+import { Icon } from '../Icon'
+import { ToolArt } from '../ToolArt'
 import { useStore } from '../../state/store'
+import { SceneButtonProps } from './SceneButtonProps'
+import { WaypointEditor } from './WaypointEditor'
 import { Vec3Input } from './Vec3Input'
 import type {
   AudioConfig,
@@ -11,20 +15,22 @@ import type {
   VideoConfig,
   SpotlightConfig,
   CameraKeyframe,
-  InteractiveObjectConfig,
+  InteractiveObjectConfig
 } from '../../state/types'
 
-export function PropertyInspector() {
+export function PropertyInspector({onTool, onLearn, controls}: {controls?: ReactNode; onTool: (tab: string) => void; onLearn: () => void}) {
   const selection = useStore((s) => s.selection)
 
   return (
     <div className="panel panel-right">
-      <div className="panel-header">Properties</div>
+      <div className="panel-header">{selection.type === 'none' ? 'Story tools' : 'Edit selection'}{controls}</div>
       <div className="panel-content">
-        {selection.type === 'none' && <ProjectOverview />}
+        {selection.type === 'none' && <ProjectOverview onTool={onTool} onLearn={onLearn}/>}
+        {selection.type === 'sceneButton' && <SceneButtonProps/>}
         {selection.type === 'camera' && <CameraProps />}
         {selection.type === 'environment' && <EnvironmentProps />}
         {selection.type === 'character' && <CharacterProps />}
+        {selection.type === 'staticObject' && <StaticObjectProps />}
         {selection.type === 'video' && <VideoProps />}
         {selection.type === 'audio' && <AudioProps />}
         {selection.type === 'spotlight' && <SpotlightProps />}
@@ -36,73 +42,20 @@ export function PropertyInspector() {
 }
 
 // ── Project Overview (no selection) ──
-function ProjectOverview() {
-  const story = useStore((s) => s.story)
-  const language = useStore((s) => s.language)
-
-  const totalChars = story.scenes.reduce((a, s) => a + s.characters.length, 0)
-  const totalVideos = story.scenes.reduce((a, s) => a + s.videos.length, 0)
-  const totalSubs = story.scenes.reduce((a, s) => a + s.subtitles.length, 0)
-  const totalObjects = story.interactableObjects?.length || 0
-
-  return (
-    <>
-      <h4 style={{ marginBottom: 12, color: 'var(--accent)' }}>
-        {story.project.title}
-      </h4>
-
-      <div className="stat-grid">
-        <StatCard label="Scenes" value={story.scenes.length} icon="🎬" />
-        <StatCard label="Characters" value={totalChars} icon="🧑" />
-        <StatCard label="Videos" value={totalVideos} icon="📹" />
-        <StatCard label="Subtitles" value={totalSubs} icon="💬" />
-        <StatCard label="Objects" value={totalObjects} icon="🔲" />
-        <StatCard label="Languages" value={story.project.languages.length} icon="🌐" />
-      </div>
-
-      <hr style={{ borderColor: 'var(--border-color)', margin: '12px 0' }} />
-
-      <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
-        <p style={{ marginBottom: 6 }}>
-          <strong>Version:</strong> {story.project.version}
-        </p>
-        <p style={{ marginBottom: 6 }}>
-          <strong>Modes:</strong> {story.project.modes.join(', ')}
-        </p>
-        <p style={{ marginBottom: 6 }}>
-          <strong>Languages:</strong> {story.project.languages.join(', ')}
-        </p>
-        <p style={{ marginBottom: 6 }}>
-          <strong>Environment:</strong> {story.project.assets.environment || '(none)'}
-        </p>
-        <p style={{ marginBottom: 6 }}>
-          <strong>Preloaded assets:</strong> {story.project.assets.preload.length}
-        </p>
-      </div>
-
-      <hr style={{ borderColor: 'var(--border-color)', margin: '12px 0' }} />
-
-      <p style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-        Click an object in the 3D viewport or scene hierarchy to edit its properties.
-        <br /><br />
-        <strong>Shortcuts:</strong><br />
-        W — Move &nbsp;|&nbsp; E — Rotate &nbsp;|&nbsp; R — Scale<br />
-        Ctrl+Z — Undo &nbsp;|&nbsp; Ctrl+Y — Redo<br />
-        Delete — Remove selected &nbsp;|&nbsp; Esc — Deselect<br />
-        Space — Play/Pause timeline
-      </p>
-    </>
-  )
-}
-
-function StatCard({ label, value, icon }: { label: string; value: number; icon: string }) {
-  return (
-    <div className="stat-card">
-      <span className="stat-icon">{icon}</span>
-      <span className="stat-value">{value}</span>
-      <span className="stat-label">{label}</span>
-    </div>
-  )
+function ProjectOverview({onTool, onLearn}: {onTool: (tab: string) => void; onLearn: () => void}) {
+  const story = useStore(s => s.story)
+  return <div className="workspace-overview">
+    <p className="overview-intro">Add to your story</p>
+    <div className="visual-shortcuts">{[
+      ['assets','Media','Bring in models, films and recordings'],
+      ['camera','Camera tour','Create a guided route'],
+      ['subtitles','Captions','Write your story'],
+      ['ui','Screens','Design the welcome and buttons']
+    ].map(([tab,title,hint])=><button key={tab} title={hint} onClick={()=>onTool(tab)}><ToolArt kind={tab}/><strong>{title}</strong><Icon name="arrow" size={17}/></button>)}</div>
+    <button className="btn learn-start" onClick={onLearn}><Icon name="play" size={20}/> Show me how</button>
+    <details className="lesson-reference"><summary>Story at a glance</summary><p>{story.scenes.length} chapters · {story.project.languages.length} languages · {Object.values(story.camera.guided || {}).flat().length} camera stops</p><p>One JSON keeps the space, chapters, settings and referenced media together.</p></details>
+    <details className="lesson-reference"><summary>Keyboard shortcuts</summary><p>W Move · E Rotate · R Scale<br/>F Focus selection · Esc Deselect<br/>Ctrl / Cmd + Z Undo<br/>Delete Remove selected</p></details>
+  </div>
 }
 
 // ── Camera Properties ──
@@ -112,20 +65,35 @@ function CameraProps() {
 
   return (
     <>
-      <h4 style={{ marginBottom: 8, color: 'var(--accent)' }}>📷 Camera</h4>
-      <p style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 12 }}>
-        Select the camera in the viewport to see a live PiP preview of what it sees.
+      <h4 style={{ marginBottom: 8, color: 'var(--accent)' }}> Camera</h4>
+      <p
+        style={{
+          fontSize: 11,
+          color: 'var(--text-secondary)',
+          marginBottom: 12
+        }}
+      >
+        Select the camera in the viewport to see a live PiP preview of what it
+        sees.
       </p>
 
       <Vec3Input
         label="Initial Position"
         value={story.camera.initialPosition}
-        onChange={(v) => updateStory((d) => { d.camera.initialPosition = v })}
+        onChange={(v) =>
+          updateStory((d) => {
+            d.camera.initialPosition = v
+          })
+        }
       />
       <Vec3Input
         label="Initial Rotation"
         value={story.camera.initialRotation}
-        onChange={(v) => updateStory((d) => { d.camera.initialRotation = v })}
+        onChange={(v) =>
+          updateStory((d) => {
+            d.camera.initialRotation = v
+          })
+        }
         step={0.1}
       />
 
@@ -138,7 +106,9 @@ function CameraProps() {
             step={0.001}
             value={story.camera.moveSpeed}
             onChange={(e) =>
-              updateStory((d) => { d.camera.moveSpeed = parseFloat(e.target.value) || 0.005 })
+              updateStory((d) => {
+                d.camera.moveSpeed = parseFloat(e.target.value) || 0.005
+              })
             }
           />
         </div>
@@ -150,7 +120,9 @@ function CameraProps() {
             step={0.001}
             value={story.camera.rotateSpeed}
             onChange={(e) =>
-              updateStory((d) => { d.camera.rotateSpeed = parseFloat(e.target.value) || 0.003 })
+              updateStory((d) => {
+                d.camera.rotateSpeed = parseFloat(e.target.value) || 0.003
+              })
             }
           />
         </div>
@@ -162,37 +134,91 @@ function CameraProps() {
       <div className="form-row">
         <div className="form-group">
           <label className="form-label">Min X</label>
-          <input className="form-input" type="number" step={0.5} value={story.camera.bounds.minX}
-            onChange={(e) => updateStory((d) => { d.camera.bounds.minX = parseFloat(e.target.value) || 0 })} />
+          <input
+            className="form-input"
+            type="number"
+            step={0.5}
+            value={story.camera.bounds.minX}
+            onChange={(e) =>
+              updateStory((d) => {
+                d.camera.bounds.minX = parseFloat(e.target.value) || 0
+              })
+            }
+          />
         </div>
         <div className="form-group">
           <label className="form-label">Max X</label>
-          <input className="form-input" type="number" step={0.5} value={story.camera.bounds.maxX}
-            onChange={(e) => updateStory((d) => { d.camera.bounds.maxX = parseFloat(e.target.value) || 0 })} />
+          <input
+            className="form-input"
+            type="number"
+            step={0.5}
+            value={story.camera.bounds.maxX}
+            onChange={(e) =>
+              updateStory((d) => {
+                d.camera.bounds.maxX = parseFloat(e.target.value) || 0
+              })
+            }
+          />
         </div>
       </div>
       <div className="form-row">
         <div className="form-group">
           <label className="form-label">Min Y</label>
-          <input className="form-input" type="number" step={0.5} value={story.camera.bounds.minY}
-            onChange={(e) => updateStory((d) => { d.camera.bounds.minY = parseFloat(e.target.value) || 0 })} />
+          <input
+            className="form-input"
+            type="number"
+            step={0.5}
+            value={story.camera.bounds.minY}
+            onChange={(e) =>
+              updateStory((d) => {
+                d.camera.bounds.minY = parseFloat(e.target.value) || 0
+              })
+            }
+          />
         </div>
         <div className="form-group">
           <label className="form-label">Max Y</label>
-          <input className="form-input" type="number" step={0.5} value={story.camera.bounds.maxY}
-            onChange={(e) => updateStory((d) => { d.camera.bounds.maxY = parseFloat(e.target.value) || 0 })} />
+          <input
+            className="form-input"
+            type="number"
+            step={0.5}
+            value={story.camera.bounds.maxY}
+            onChange={(e) =>
+              updateStory((d) => {
+                d.camera.bounds.maxY = parseFloat(e.target.value) || 0
+              })
+            }
+          />
         </div>
       </div>
       <div className="form-row">
         <div className="form-group">
           <label className="form-label">Min Z</label>
-          <input className="form-input" type="number" step={0.5} value={story.camera.bounds.minZ}
-            onChange={(e) => updateStory((d) => { d.camera.bounds.minZ = parseFloat(e.target.value) || 0 })} />
+          <input
+            className="form-input"
+            type="number"
+            step={0.5}
+            value={story.camera.bounds.minZ}
+            onChange={(e) =>
+              updateStory((d) => {
+                d.camera.bounds.minZ = parseFloat(e.target.value) || 0
+              })
+            }
+          />
         </div>
         <div className="form-group">
           <label className="form-label">Max Z</label>
-          <input className="form-input" type="number" step={0.5} value={story.camera.bounds.maxZ}
-            onChange={(e) => updateStory((d) => { d.camera.bounds.maxZ = parseFloat(e.target.value) || 0 })} />
+          <input
+            className="form-input"
+            type="number"
+            step={0.5}
+            value={story.camera.bounds.maxZ}
+            onChange={(e) =>
+              updateStory((d) => {
+                d.camera.bounds.maxZ = parseFloat(e.target.value) || 0
+              })
+            }
+          />
         </div>
       </div>
     </>
@@ -239,11 +265,17 @@ function EnvironmentProps() {
       <Vec3Input
         label="Position"
         value={story.environment.position}
-        onChange={(v) => updateStory((d) => { d.environment.position = v })}
+        onChange={(v) =>
+          updateStory((d) => {
+            d.environment.position = v
+          })
+        }
       />
 
       <hr style={{ borderColor: 'var(--border-color)', margin: '12px 0' }} />
-      <h4 style={{ marginBottom: 8, color: 'var(--accent)' }}>Global Lighting</h4>
+      <h4 style={{ marginBottom: 8, color: 'var(--accent)' }}>
+        Global Lighting
+      </h4>
 
       <div className="form-row">
         <div className="form-group">
@@ -254,7 +286,9 @@ function EnvironmentProps() {
             step={0.1}
             value={story.lighting.ambient.intensity}
             onChange={(e) =>
-              updateStory((d) => { d.lighting.ambient.intensity = parseFloat(e.target.value) || 0 })
+              updateStory((d) => {
+                d.lighting.ambient.intensity = parseFloat(e.target.value) || 0
+              })
             }
           />
         </div>
@@ -266,7 +300,10 @@ function EnvironmentProps() {
             step={0.1}
             value={story.lighting.directional.intensity}
             onChange={(e) =>
-              updateStory((d) => { d.lighting.directional.intensity = parseFloat(e.target.value) || 0 })
+              updateStory((d) => {
+                d.lighting.directional.intensity =
+                  parseFloat(e.target.value) || 0
+              })
             }
           />
         </div>
@@ -275,7 +312,11 @@ function EnvironmentProps() {
       <Vec3Input
         label="Directional Light Position"
         value={story.lighting.directional.position}
-        onChange={(v) => updateStory((d) => { d.lighting.directional.position = v })}
+        onChange={(v) =>
+          updateStory((d) => {
+            d.lighting.directional.position = v
+          })
+        }
       />
 
       <hr style={{ borderColor: 'var(--border-color)', margin: '12px 0' }} />
@@ -288,7 +329,11 @@ function EnvironmentProps() {
           value={story.rendering?.toneMapping || 'ACESFilmic'}
           onChange={(e) =>
             updateStory((d) => {
-              if (!d.rendering) d.rendering = { toneMapping: 'ACESFilmic', toneMappingExposure: 1.4 }
+              if (!d.rendering)
+                d.rendering = {
+                  toneMapping: 'ACESFilmic',
+                  toneMappingExposure: 1.4
+                }
               d.rendering.toneMapping = e.target.value
             })
           }
@@ -309,7 +354,11 @@ function EnvironmentProps() {
           value={story.rendering?.toneMappingExposure ?? 1.4}
           onChange={(e) =>
             updateStory((d) => {
-              if (!d.rendering) d.rendering = { toneMapping: 'ACESFilmic', toneMappingExposure: 1.4 }
+              if (!d.rendering)
+                d.rendering = {
+                  toneMapping: 'ACESFilmic',
+                  toneMappingExposure: 1.4
+                }
               d.rendering.toneMappingExposure = parseFloat(e.target.value) || 1
             })
           }
@@ -329,7 +378,12 @@ function CharacterProps() {
 
   const scene = story.scenes.find((s) => s.id === selection.sceneId)
   const char = scene?.characters.find((c) => c.id === selection.itemId)
-  if (!scene || !char) return <div style={{ color: 'var(--text-muted)', padding: 20 }}>Character not found</div>
+  if (!scene || !char)
+    return (
+      <div style={{ color: 'var(--text-muted)', padding: 20 }}>
+        Character not found
+      </div>
+    )
 
   const update = (updates: Partial<CharacterConfig>) =>
     updateCharacter(scene.id, char.id, updates)
@@ -345,20 +399,54 @@ function CharacterProps() {
 
   return (
     <>
-      <h4 style={{ marginBottom: 8, color: 'var(--accent)' }}>🧑 Character: {char.id}</h4>
+      <h4 style={{ marginBottom: 8, color: 'var(--accent)' }}>
+        {' '}
+        Character: {char.id}
+      </h4>
 
       <div className="form-group">
         <label className="form-label">Model Path</label>
         <div style={{ display: 'flex', gap: 4 }}>
-          <input className="form-input" style={{ flex: 1 }} value={char.model} onChange={(e) => update({ model: e.target.value })} />
-          <button className="btn btn-sm" onClick={() => modelInputRef.current?.click()} title="Browse for model file">📁</button>
+          <input
+            className="form-input"
+            style={{ flex: 1 }}
+            value={char.model}
+            onChange={(e) => update({ model: e.target.value })}
+          />
+          <button
+            className="btn btn-sm"
+            onClick={() => modelInputRef.current?.click()}
+            title="Browse for model file"
+          >
+            Browse
+          </button>
         </div>
-        <input ref={modelInputRef} type="file" accept=".glb,.gltf" style={{ display: 'none' }} onChange={handleModelFileSelect} />
+        <input
+          ref={modelInputRef}
+          type="file"
+          accept=".glb,.gltf"
+          style={{ display: 'none' }}
+          onChange={handleModelFileSelect}
+        />
       </div>
 
-      <Vec3Input label="Position" value={char.position} onChange={(v) => update({ position: v })} />
-      <Vec3Input label="Rotation" value={char.rotation} onChange={(v) => update({ rotation: v })} step={0.1} />
-      <Vec3Input label="Scale" value={char.scale} onChange={(v) => update({ scale: v })} step={0.1} />
+      <Vec3Input
+        label="Position"
+        value={char.position}
+        onChange={(v) => update({ position: v })}
+      />
+      <Vec3Input
+        label="Rotation"
+        value={char.rotation}
+        onChange={(v) => update({ rotation: v })}
+        step={0.1}
+      />
+      <Vec3Input
+        label="Scale"
+        value={char.scale}
+        onChange={(v) => update({ scale: v })}
+        step={0.1}
+      />
 
       <div className="form-group">
         <label className="form-label">Animation</label>
@@ -380,7 +468,9 @@ function CharacterProps() {
             min={0}
             max={1}
             value={char.opacity}
-            onChange={(e) => update({ opacity: parseFloat(e.target.value) || 0.7 })}
+            onChange={(e) =>
+              update({ opacity: parseFloat(e.target.value) || 0.7 })
+            }
           />
         </div>
         <div className="form-group">
@@ -396,7 +486,9 @@ function CharacterProps() {
       </div>
 
       <div className="form-group">
-        <label className="form-label">Duration (ms) — 0 = until scene ends</label>
+        <label className="form-label">
+          Duration (ms) — 0 = until scene ends
+        </label>
         <input
           className="form-input"
           type="number"
@@ -414,7 +506,9 @@ function CharacterProps() {
             type="number"
             step={100}
             value={char.fadeIn}
-            onChange={(e) => update({ fadeIn: parseInt(e.target.value) || 3000 })}
+            onChange={(e) =>
+              update({ fadeIn: parseInt(e.target.value) || 3000 })
+            }
           />
         </div>
         <div className="form-group">
@@ -424,7 +518,9 @@ function CharacterProps() {
             type="number"
             step={100}
             value={char.fadeOut}
-            onChange={(e) => update({ fadeOut: parseInt(e.target.value) || 1000 })}
+            onChange={(e) =>
+              update({ fadeOut: parseInt(e.target.value) || 1000 })
+            }
           />
         </div>
       </div>
@@ -442,9 +538,15 @@ function VideoProps() {
 
   const scene = story.scenes.find((s) => s.id === selection.sceneId)
   const vid = scene?.videos.find((v) => v.id === selection.itemId)
-  if (!scene || !vid) return <div style={{ color: 'var(--text-muted)', padding: 20 }}>Video not found</div>
+  if (!scene || !vid)
+    return (
+      <div style={{ color: 'var(--text-muted)', padding: 20 }}>
+        Video not found
+      </div>
+    )
 
-  const update = (updates: Partial<VideoConfig>) => updateVideo(scene.id, vid.id, updates)
+  const update = (updates: Partial<VideoConfig>) =>
+    updateVideo(scene.id, vid.id, updates)
 
   const handleVideoFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -457,19 +559,48 @@ function VideoProps() {
 
   return (
     <>
-      <h4 style={{ marginBottom: 8, color: 'var(--accent)' }}>📹 Video: {vid.id}</h4>
+      <h4 style={{ marginBottom: 8, color: 'var(--accent)' }}>
+        {' '}
+        Video: {vid.id}
+      </h4>
 
       <div className="form-group">
         <label className="form-label">URL / Path</label>
         <div style={{ display: 'flex', gap: 4 }}>
-          <input className="form-input" style={{ flex: 1 }} value={vid.url} onChange={(e) => update({ url: e.target.value })} />
-          <button className="btn btn-sm" onClick={() => videoInputRef.current?.click()} title="Browse for video file">📁</button>
+          <input
+            className="form-input"
+            style={{ flex: 1 }}
+            value={vid.url}
+            onChange={(e) => update({ url: e.target.value })}
+          />
+          <button
+            className="btn btn-sm"
+            onClick={() => videoInputRef.current?.click()}
+            title="Browse for video file"
+          >
+            Browse
+          </button>
         </div>
-        <input ref={videoInputRef} type="file" accept="video/*" style={{ display: 'none' }} onChange={handleVideoFileSelect} />
+        <input
+          ref={videoInputRef}
+          type="file"
+          accept="video/*"
+          style={{ display: 'none' }}
+          onChange={handleVideoFileSelect}
+        />
       </div>
 
-      <Vec3Input label="Position" value={vid.position} onChange={(v) => update({ position: v })} />
-      <Vec3Input label="Rotation" value={vid.rotation} onChange={(v) => update({ rotation: v })} step={0.1} />
+      <Vec3Input
+        label="Position"
+        value={vid.position}
+        onChange={(v) => update({ position: v })}
+      />
+      <Vec3Input
+        label="Rotation"
+        value={vid.rotation}
+        onChange={(v) => update({ rotation: v })}
+        step={0.1}
+      />
 
       <div className="form-row">
         <div className="form-group">
@@ -479,7 +610,9 @@ function VideoProps() {
             type="number"
             step={0.1}
             value={vid.size[0]}
-            onChange={(e) => update({ size: [parseFloat(e.target.value) || 2, vid.size[1]] })}
+            onChange={(e) =>
+              update({ size: [parseFloat(e.target.value) || 2, vid.size[1]] })
+            }
           />
         </div>
         <div className="form-group">
@@ -489,7 +622,9 @@ function VideoProps() {
             type="number"
             step={0.1}
             value={vid.size[1]}
-            onChange={(e) => update({ size: [vid.size[0], parseFloat(e.target.value) || 1.5] })}
+            onChange={(e) =>
+              update({ size: [vid.size[0], parseFloat(e.target.value) || 1.5] })
+            }
           />
         </div>
       </div>
@@ -502,7 +637,9 @@ function VideoProps() {
             type="number"
             step={1}
             value={vid.triggerTime}
-            onChange={(e) => update({ triggerTime: parseFloat(e.target.value) || 0 })}
+            onChange={(e) =>
+              update({ triggerTime: parseFloat(e.target.value) || 0 })
+            }
           />
         </div>
         <div className="form-group">
@@ -512,7 +649,9 @@ function VideoProps() {
             type="number"
             step={1}
             value={vid.duration || 30}
-            onChange={(e) => update({ duration: parseFloat(e.target.value) || 30 })}
+            onChange={(e) =>
+              update({ duration: parseFloat(e.target.value) || 30 })
+            }
           />
         </div>
       </div>
@@ -565,6 +704,14 @@ function VideoProps() {
           </label>
         </div>
       </div>
+      {vid.multiWall && <details open><summary>Projection surfaces</summary><p>Each surface shows the same video at the same time.</p>
+        {(vid.walls || []).map((wall,i) => <fieldset className="feature-item" key={i}><legend>Surface {i+1}</legend>
+          <Vec3Input label="Position" value={wall.position} onChange={position => update({walls:vid.walls!.map((w,j) => i===j ? {...w,position} : w)})}/>
+          <Vec3Input label="Rotation (radians)" value={wall.rotation} onChange={rotation => update({walls:vid.walls!.map((w,j) => i===j ? {...w,rotation} : w)})}/>
+          <button className="btn" onClick={() => update({walls:vid.walls!.filter((_,j) => j!==i)})}>Remove surface {i+1}</button>
+        </fieldset>)}
+        <button className="btn" onClick={() => update({walls:[...(vid.walls || []),{position:[...vid.position],rotation:[...vid.rotation],size:[...vid.size]}]})}>Add projection surface</button>
+      </details>}
     </>
   )
 }
@@ -579,7 +726,12 @@ function AudioProps() {
 
   const scene = story.scenes.find((s) => s.id === selection.sceneId)
   const audio = scene?.audio.find((a) => a.id === selection.itemId)
-  if (!scene || !audio) return <div style={{ color: 'var(--text-muted)', padding: 20 }}>Audio not found</div>
+  if (!scene || !audio)
+    return (
+      <div style={{ color: 'var(--text-muted)', padding: 20 }}>
+        Audio not found
+      </div>
+    )
 
   const update = (updates: Partial<AudioConfig>) =>
     updateAudio(scene.id, audio.id, updates)
@@ -595,7 +747,10 @@ function AudioProps() {
 
   return (
     <>
-      <h4 style={{ marginBottom: 8, color: 'var(--accent)' }}>🔊 Audio: {audio.id}</h4>
+      <h4 style={{ marginBottom: 8, color: 'var(--accent)' }}>
+        {' '}
+        Audio: {audio.id}
+      </h4>
 
       <div className="form-group">
         <label className="form-label">File Path</label>
@@ -611,7 +766,7 @@ function AudioProps() {
             onClick={() => fileInputRef.current?.click()}
             title="Browse for audio file"
           >
-            📁
+            Browse
           </button>
         </div>
         <input
@@ -633,7 +788,9 @@ function AudioProps() {
             min={0}
             max={1}
             value={audio.volume}
-            onChange={(e) => update({ volume: parseFloat(e.target.value) || 1 })}
+            onChange={(e) =>
+              update({ volume: Math.max(0, Math.min(1, Number(e.target.value))) })
+            }
           />
         </div>
         <div className="form-group">
@@ -696,6 +853,7 @@ function AudioProps() {
         </div>
       </div>
 
+      {audio.positional && <WaypointEditor points={audio.waypoints || []} onChange={waypoints => update({waypoints})} label="Moving audio" />}
       {audio.positional && (
         <>
           <hr style={{ borderColor: 'var(--border-color)', margin: '8px 0' }} />
@@ -712,7 +870,9 @@ function AudioProps() {
                 type="number"
                 step={0.5}
                 value={audio.refDistance ?? 1}
-                onChange={(e) => update({ refDistance: parseFloat(e.target.value) || 1 })}
+                onChange={(e) =>
+                  update({ refDistance: parseFloat(e.target.value) || 1 })
+                }
               />
             </div>
             <div className="form-group">
@@ -722,7 +882,9 @@ function AudioProps() {
                 type="number"
                 step={1}
                 value={audio.maxDistance ?? 10}
-                onChange={(e) => update({ maxDistance: parseFloat(e.target.value) || 10 })}
+                onChange={(e) =>
+                  update({ maxDistance: parseFloat(e.target.value) || 10 })
+                }
               />
             </div>
           </div>
@@ -739,17 +901,35 @@ function SpotlightProps() {
   const updateSpotlight = useStore((s) => s.updateSpotlight)
 
   const scene = story.scenes.find((s) => s.id === selection.sceneId)
-  const spot = scene?.lighting.spotlights?.find((s) => s.id === selection.itemId)
-  if (!scene || !spot) return <div style={{ color: 'var(--text-muted)', padding: 20 }}>Spotlight not found</div>
+  const spot = scene?.lighting.spotlights?.find(
+    (s) => s.id === selection.itemId
+  )
+  if (!scene || !spot)
+    return (
+      <div style={{ color: 'var(--text-muted)', padding: 20 }}>
+        Spotlight not found
+      </div>
+    )
 
-  const update = (updates: Partial<SpotlightConfig>) => updateSpotlight(scene.id, spot.id, updates)
+  const update = (updates: Partial<SpotlightConfig>) =>
+    updateSpotlight(scene.id, spot.id, updates)
 
   return (
     <>
-      <h4 style={{ marginBottom: 8, color: 'var(--accent)' }}>Spotlight: {spot.id}</h4>
+      <h4 style={{ marginBottom: 8, color: 'var(--accent)' }}>
+        Spotlight: {spot.id}
+      </h4>
 
-      <Vec3Input label="Position" value={spot.position} onChange={(v) => update({ position: v })} />
-      <Vec3Input label="Target" value={spot.target} onChange={(v) => update({ target: v })} />
+      <Vec3Input
+        label="Position"
+        value={spot.position}
+        onChange={(v) => update({ position: v })}
+      />
+      <Vec3Input
+        label="Target"
+        value={spot.target}
+        onChange={(v) => update({ target: v })}
+      />
 
       <div className="form-row">
         <div className="form-group">
@@ -759,7 +939,9 @@ function SpotlightProps() {
             type="number"
             step={0.1}
             value={spot.intensity}
-            onChange={(e) => update({ intensity: parseFloat(e.target.value) || 1 })}
+            onChange={(e) =>
+              update({ intensity: parseFloat(e.target.value) || 1 })
+            }
           />
         </div>
         <div className="form-group">
@@ -769,7 +951,9 @@ function SpotlightProps() {
             type="number"
             step={0.1}
             value={spot.angle}
-            onChange={(e) => update({ angle: parseFloat(e.target.value) || 0.5 })}
+            onChange={(e) =>
+              update({ angle: parseFloat(e.target.value) || 0.5 })
+            }
           />
         </div>
       </div>
@@ -783,7 +967,9 @@ function SpotlightProps() {
           min={0}
           max={1}
           value={spot.penumbra}
-          onChange={(e) => update({ penumbra: parseFloat(e.target.value) || 0.5 })}
+          onChange={(e) =>
+            update({ penumbra: parseFloat(e.target.value) || 0.5 })
+          }
         />
       </div>
 
@@ -819,14 +1005,22 @@ function CameraKeyframeProps() {
   const updateCameraKeyframe = useStore((s) => s.updateCameraKeyframe)
 
   const sceneId = selection.sceneId
-  const kf = sceneId ? story.camera.guided?.[sceneId]?.find((k) => k.id === selection.itemId) : null
-  if (!sceneId || !kf) return <div style={{ color: 'var(--text-muted)', padding: 20 }}>Keyframe not found</div>
+  const kf = sceneId
+    ? story.camera.guided?.[sceneId]?.find((k) => k.id === selection.itemId)
+    : null
+  if (!sceneId || !kf)
+    return (
+      <div style={{ color: 'var(--text-muted)', padding: 20 }}>
+        Keyframe not found
+      </div>
+    )
 
-  const update = (updates: Partial<CameraKeyframe>) => updateCameraKeyframe(sceneId, kf.id, updates)
+  const update = (updates: Partial<CameraKeyframe>) =>
+    updateCameraKeyframe(sceneId, kf.id, updates)
 
   return (
     <>
-      <h4 style={{ marginBottom: 8, color: 'var(--accent)' }}>Camera Keyframe</h4>
+      <h4 style={{ marginBottom: 8, color: 'var(--accent)' }}>Camera stop</h4>
 
       <div className="form-group">
         <label className="form-label">Time (seconds)</label>
@@ -835,22 +1029,36 @@ function CameraKeyframeProps() {
           type="number"
           step={1}
           value={kf.time}
-          onChange={(e) => update({ time: parseFloat(e.target.value) || 0 })}
+          onChange={(e) =>
+            update({ time: Math.max(0, Number(e.target.value)) })
+          }
         />
       </div>
 
-      <Vec3Input label="Position" value={kf.position} onChange={(v) => update({ position: v })} />
-      <Vec3Input label="Rotation" value={kf.rotation} onChange={(v) => update({ rotation: v })} step={0.1} />
+      <Vec3Input
+        label="Position"
+        value={kf.position}
+        onChange={(v) => update({ position: v })}
+      />
+      <Vec3Input
+        label="Rotation"
+        value={kf.rotation}
+        onChange={(v) => update({ rotation: v })}
+        step={0.1}
+      />
 
       <div className="form-row">
         <div className="form-group">
-          <label className="form-label">Duration (ms)</label>
+          <label className="form-label">Move duration (seconds)</label>
           <input
             className="form-input"
             type="number"
-            step={100}
-            value={kf.duration}
-            onChange={(e) => update({ duration: parseInt(e.target.value) || 2000 })}
+            step={0.1}
+            min={0}
+            value={(kf.duration ?? 2000) / 1000}
+            onChange={(e) =>
+              update({ duration: Math.max(0, Number(e.target.value)) * 1000 })
+            }
           />
         </div>
         <div className="form-group">
@@ -858,7 +1066,9 @@ function CameraKeyframeProps() {
           <select
             className="form-select"
             value={kf.easing}
-            onChange={(e) => update({ easing: e.target.value as CameraKeyframe['easing'] })}
+            onChange={(e) =>
+              update({ easing: e.target.value as CameraKeyframe['easing'] })
+            }
           >
             <option value="quadratic">Quadratic</option>
             <option value="cubic">Cubic</option>
@@ -878,29 +1088,52 @@ function InteractiveObjectProps() {
   const language = useStore((s) => s.language)
 
   const obj = story.interactableObjects?.find((o) => o.id === selection.itemId)
-  if (!obj) return <div style={{ color: 'var(--text-muted)', padding: 20 }}>Object not found</div>
+  if (!obj)
+    return (
+      <div style={{ color: 'var(--text-muted)', padding: 20 }}>
+        Object not found
+      </div>
+    )
 
-  const update = (updates: Partial<InteractiveObjectConfig>) => updateInteractiveObject(obj.id, updates)
+  const update = (updates: Partial<InteractiveObjectConfig>) =>
+    updateInteractiveObject(obj.id, updates)
 
   return (
     <>
-      <h4 style={{ marginBottom: 8, color: 'var(--accent)' }}>Interactive: {obj.name[language] || obj.id}</h4>
+      <h4 style={{ marginBottom: 8, color: 'var(--accent)' }}>
+        Interactive: {obj.name[language] || obj.id}
+      </h4>
 
       <div className="form-group">
         <label className="form-label">Name ({language})</label>
         <input
           className="form-input"
           value={obj.name[language] || ''}
-          onChange={(e) => update({ name: { ...obj.name, [language]: e.target.value } })}
+          onChange={(e) =>
+            update({ name: { ...obj.name, [language]: e.target.value } })
+          }
         />
       </div>
 
       <div className="form-group">
         <label className="form-label">Model Path</label>
-        <input className="form-input" value={obj.model} onChange={(e) => update({ model: e.target.value })} />
+        <input
+          className="form-input"
+          value={obj.model}
+          onChange={(e) => update({ model: e.target.value })}
+        />
       </div>
 
-      <h5 style={{ marginTop: 8, marginBottom: 4, color: 'var(--text-secondary)', fontSize: 11 }}>ORIGINAL STATE</h5>
+      <h5
+        style={{
+          marginTop: 8,
+          marginBottom: 4,
+          color: 'var(--text-secondary)',
+          fontSize: 11
+        }}
+      >
+        ORIGINAL STATE
+      </h5>
       <Vec3Input
         label="Position"
         value={obj.original.position}
@@ -919,22 +1152,37 @@ function InteractiveObjectProps() {
         step={0.1}
       />
 
-      <h5 style={{ marginTop: 8, marginBottom: 4, color: 'var(--text-secondary)', fontSize: 11 }}>TRANSFORMED STATE</h5>
+      <h5
+        style={{
+          marginTop: 8,
+          marginBottom: 4,
+          color: 'var(--text-secondary)',
+          fontSize: 11
+        }}
+      >
+        TRANSFORMED STATE
+      </h5>
       <Vec3Input
         label="Position"
         value={obj.transformed.position}
-        onChange={(v) => update({ transformed: { ...obj.transformed, position: v } })}
+        onChange={(v) =>
+          update({ transformed: { ...obj.transformed, position: v } })
+        }
       />
       <Vec3Input
         label="Rotation"
         value={obj.transformed.rotation}
-        onChange={(v) => update({ transformed: { ...obj.transformed, rotation: v } })}
+        onChange={(v) =>
+          update({ transformed: { ...obj.transformed, rotation: v } })
+        }
         step={0.1}
       />
       <Vec3Input
         label="Scale"
         value={obj.transformed.scale}
-        onChange={(v) => update({ transformed: { ...obj.transformed, scale: v } })}
+        onChange={(v) =>
+          update({ transformed: { ...obj.transformed, scale: v } })
+        }
         step={0.1}
       />
 
@@ -959,7 +1207,14 @@ function InteractiveObjectProps() {
             className="form-input"
             rows={3}
             value={obj.infoBoxMessage[language] || ''}
-            onChange={(e) => update({ infoBoxMessage: { ...obj.infoBoxMessage, [language]: e.target.value } })}
+            onChange={(e) =>
+              update({
+                infoBoxMessage: {
+                  ...obj.infoBoxMessage,
+                  [language]: e.target.value
+                }
+              })
+            }
           />
         </div>
       )}
@@ -975,6 +1230,55 @@ function InteractiveObjectProps() {
           Enable Rotation Animation
         </label>
       </div>
+    </>
+  )
+}
+
+function StaticObjectProps() {
+  const story = useStore((s) => s.story),
+    selection = useStore((s) => s.selection),
+    updateStory = useStore((s) => s.updateStory)
+  const object = story.scenes
+    .find((s) => s.id === selection.sceneId)
+    ?.objects?.find((o) => o.id === selection.itemId)
+  if (!object) return null
+  const update = (field: string, value: unknown) =>
+    updateStory((d) => {
+      const o = d.scenes
+        .find((s) => s.id === selection.sceneId)
+        ?.objects?.find((o) => o.id === selection.itemId)
+      if (o) Object.assign(o, { [field]: value })
+    }, 'Edit object')
+  return (
+    <>
+      <h4>Object</h4>
+      <label className="form-label">
+        Model file
+        <input
+          className="form-input"
+          value={object.model}
+          onChange={(e) => update('model', e.target.value)}
+        />
+      </label>
+      <Vec3Input
+        label="Position"
+        value={object.position || [0, 0, 0]}
+        onChange={(v) => update('position', v)}
+      />
+      <Vec3Input
+        label="Rotation"
+        value={object.rotation || [0, 0, 0]}
+        onChange={(v) => update('rotation', v)}
+      />
+      <Vec3Input
+        label="Scale"
+        value={
+          typeof object.scale === 'number'
+            ? [object.scale, object.scale, object.scale]
+            : object.scale || [1, 1, 1]
+        }
+        onChange={(v) => update('scale', v)}
+      />
     </>
   )
 }

@@ -22,6 +22,7 @@ export class SceneEffects {
     this.roomModel = options.roomModel || options.scene || null
     this.lights = options.lights || { ambient: null, directional: null, hemisphere: null }
     this.language = options.language || 'en'
+    this.getTime = options.getTime || (() => performance.now() / 1000)
     
     // Highlight light for walking tour
     this.highlightLight = null
@@ -73,7 +74,7 @@ export class SceneEffects {
    */
   initWalkingTour(config) {
     this.walkingTourConfig = {
-      waypoints: config.waypoints || [],
+      waypoints: [...(config.waypoints || [])].sort((a,b) => a.time-b.time),
       dimLights: config.dimLights || { ambient: 0.05, directional: 0.2, hemisphere: 0.02 },
       endLights: config.endLights || { ambient: 0.25, directional: 0.5, hemisphere: 0.05 },
       guidanceText: config.guidanceText || this.guidanceTexts
@@ -100,6 +101,7 @@ export class SceneEffects {
   initFlicker(config) {
     this.flickerConfig = {
       triggerTime: config.triggerTime || 0,
+      duration: config.duration,
       patterns: config.patterns || [
         { duration: 100, intensity: 0.1 },
         { duration: 50, intensity: 0.8 },
@@ -126,10 +128,12 @@ export class SceneEffects {
         hemisphere: this.lights.hemisphere?.intensity || 0
       }
       
-      const startTime = performance.now()
+      const version = this.transitionVersion = (this.transitionVersion || 0) + 1
+      const startTime = this.getTime() * 1000
 
       const animate = () => {
-        const elapsed = performance.now() - startTime
+        if (version !== this.transitionVersion) { resolve(); return }
+        const elapsed = this.getTime() * 1000 - startTime
         const progress = Math.min(elapsed / duration, 1)
 
         // Ease in-out
@@ -169,7 +173,7 @@ export class SceneEffects {
     textElement.id = 'sj-guidance-text'
     textElement.style.cssText = `
       position: fixed;
-      top: 10%;
+      top: 145px;
       left: 50%;
       transform: translateX(-50%);
       color: white;
@@ -196,19 +200,15 @@ export class SceneEffects {
     if (!this.walkingTourConfig || !this.highlightLight) return
 
     this.isRunning = true
-    this.startTime = performance.now() / 1000
+    this.startTime = this.getTime()
     this.hasTransitionedToEndState = false
 
     // Save current light intensities before dimming
     this.saveCurrentIntensities()
 
     // Show guidance text
-    const guidanceText = this.createGuidanceText()
-    setTimeout(() => guidanceText.style.opacity = '1', 100)
-    setTimeout(() => {
-      guidanceText.style.opacity = '0'
-      setTimeout(() => guidanceText.remove(), 2000)
-    }, 7000)
+    this.guidanceElement?.remove()
+    this.guidanceElement = this.createGuidanceText()
 
     // Dim lights to walking tour dim state
     this.transitionLights(this.walkingTourConfig.dimLights)
@@ -222,12 +222,13 @@ export class SceneEffects {
    * Run walking tour animation
    */
   runWalkingTourAnimation() {
-    if (!this.isRunning || !this.startTime) return
+    if (!this.isRunning || this.startTime === null) return
 
     const waypoints = this.walkingTourConfig.waypoints
     if (!waypoints || waypoints.length === 0) return
 
-    const realTimeSeconds = (performance.now() / 1000) - this.startTime
+    const realTimeSeconds = this.getTime()
+    if (this.guidanceElement) this.guidanceElement.style.opacity = realTimeSeconds - this.startTime < 7 ? '1' : '0'
 
     // Handle pre-first-waypoint state
     if (realTimeSeconds < waypoints[0].time) {
@@ -267,11 +268,11 @@ export class SceneEffects {
 
       // Update intensity (fade in/out)
       if (timeInTransition < transitionDuration) {
-        this.highlightLight.intensity = Math.min(timeInTransition / transitionDuration, 1) * 1.5
+        this.highlightLight.intensity = Math.min(timeInTransition / transitionDuration, 1) * (currentWaypoint.intensity ?? 1.5)
       } else if (nextWaypoint.time - realTimeSeconds < transitionDuration) {
         this.highlightLight.intensity = Math.max((nextWaypoint.time - realTimeSeconds) / transitionDuration, 0) * 1.5
       } else {
-        this.highlightLight.intensity = 1.5
+        this.highlightLight.intensity = currentWaypoint.intensity ?? 1.5
       }
     } else {
       this.highlightLight.intensity = 0
@@ -287,6 +288,8 @@ export class SceneEffects {
    */
   stopWalkingTour() {
     this.isRunning = false
+    this.transitionVersion = (this.transitionVersion || 0) + 1
+    this.guidanceElement?.remove()
     this.hasTransitionedToEndState = false
     
     if (this.currentAnimation) {
@@ -309,78 +312,45 @@ export class SceneEffects {
   /**
    * Start flicker effect
    */
-  async startFlicker() {
+  startFlicker() {
     if (this.isFlickering || !this.flickerConfig) return
     this.isFlickering = true
-
-    // Save current intensities before flickering
-    this.saveCurrentIntensities()
-    console.log('SceneEffects: Flicker starting, saved intensities:', { ...this.savedIntensities })
-
-    const applyIntensity = (multiplier) => {
-      if (this.lights.ambient && this.savedIntensities) {
-        this.lights.ambient.intensity = this.savedIntensities.ambient * multiplier
-      }
-      if (this.lights.directional && this.savedIntensities) {
-        this.lights.directional.intensity = this.savedIntensities.directional * multiplier
-      }
-      if (this.lights.hemisphere && this.savedIntensities) {
-        this.lights.hemisphere.intensity = this.savedIntensities.hemisphere * multiplier
-      }
+    const saved = Object.fromEntries(Object.entries(this.lights).map(([key,light]) => [key,light?.intensity || 0]))
+    const patterns = this.flickerConfig.patterns.filter(p => p.duration > 0)
+    const cycle = patterns.reduce((sum,p) => sum+p.duration,0)
+    const duration = this.flickerConfig.duration > 0 ? this.flickerConfig.duration*1000 : cycle
+    const started = this.getTime()*1000
+    const version = this.flickerVersion = (this.flickerVersion || 0)+1
+    const tick = () => {
+      if (!this.isFlickering || version !== this.flickerVersion) return
+      const elapsed = Math.max(0,this.getTime()*1000-started)
+      let multiplier = 1
+      if (elapsed < duration && cycle > 0) {
+        let cursor = elapsed % cycle
+        for (const pattern of patterns) { if(cursor < pattern.duration) {multiplier=pattern.intensity;break} cursor-=pattern.duration }
+      } else this.isFlickering = false
+      for (const [key,light] of Object.entries(this.lights)) if(light) light.intensity=saved[key]*multiplier
+      if (this.isFlickering) this.flickerFrame=requestAnimationFrame(tick)
     }
-
-    for (const pattern of this.flickerConfig.patterns) {
-      if (!this.isFlickering) break
-      applyIntensity(pattern.intensity)
-      await new Promise(resolve => setTimeout(resolve, pattern.duration))
-    }
-
-    // Restore to saved intensities (the state before flicker started)
-    if (this.savedIntensities) {
-      applyIntensity(1.0)
-    }
-    this.isFlickering = false
-    console.log('SceneEffects: Flicker complete, restored to pre-flicker intensities')
+    tick()
   }
 
-  /**
-   * Stop flicker effect
-   * IMPORTANT: Only stops the flicker loop. Does NOT force-restore light values.
-   * The flicker's own completion will restore to pre-flicker values.
-   * Scene transitions are handled by LightingManager.
-   */
   stopFlicker() {
     this.isFlickering = false
-    // NOTE: We intentionally do NOT force-restore light intensities here.
-    // If the flicker was interrupted mid-pattern, the LightingManager will
-    // handle the correct lighting via applySceneLighting() for the next scene.
-    console.log('SceneEffects: Flicker stopped')
+    this.flickerVersion = (this.flickerVersion || 0)+1
+    if (this.flickerFrame) cancelAnimationFrame(this.flickerFrame)
   }
 
-  /**
-   * Set language
-   */
+
   setLanguage(language) {
     this.language = language
+    if(this.guidanceElement) this.guidanceElement.textContent = this.walkingTourConfig?.guidanceText?.[language] || this.guidanceTexts[language] || ''
   }
-
-  /**
-   * Clean up
-   */
   dispose() {
     this.stopWalkingTour()
-    this.isFlickering = false
-    
-    if (this.highlightLight && this.roomModel) {
-      this.roomModel.remove(this.highlightLight)
-    }
-
-    // Remove guidance text if exists
-    const guidanceText = document.getElementById('sj-guidance-text')
-    if (guidanceText) {
-      guidanceText.remove()
-    }
+    this.stopFlicker()
+    if (this.highlightLight && this.roomModel) this.roomModel.remove(this.highlightLight)
+    this.guidanceElement?.remove()
   }
 }
-
 export default SceneEffects

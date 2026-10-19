@@ -11,12 +11,11 @@
  */
 import { useRef, useState, useMemo, useCallback, useEffect } from 'react'
 import { useStore } from '../../state/store'
+import { chapterDuration } from '../../utils/playback'
 
 const PIXELS_PER_SECOND = 8
 const SNAP_SECONDS = 0.5 // snap granularity in seconds
 const LABEL_WIDTH = 72 // left label column width in px
-const DEFAULT_CHAR_DURATION_SEC = 60 // visual fallback when duration == 0 ("until scene ends")
-const DEFAULT_AUDIO_DURATION_SEC = 120
 
 // ─────────────────────────────────────────────
 // Helpers
@@ -60,6 +59,9 @@ export function Timeline() {
   const story = useStore((s) => s.story)
   const activeSceneId = useStore((s) => s.activeSceneId)
   const timelinePosition = useStore((s) => s.timelinePosition)
+  const mediaDurations = useStore(s => s.mediaDurations)
+  const playbackPreview = useStore(s => s.playbackPreview)
+  const stopPlayback = useStore(s => s.stopPlayback)
   const isPlaying = useStore((s) => s.isPlaying)
   const setTimelinePosition = useStore((s) => s.setTimelinePosition)
   const setIsPlaying = useStore((s) => s.setIsPlaying)
@@ -74,7 +76,10 @@ export function Timeline() {
   const [zoom, setZoom] = useState(1)
   const scrollRef = useRef<HTMLDivElement>(null)
   const [drag, setDrag] = useState<DragState | null>(null)
-  const [dragDelta, setDragDelta] = useState<{ time: number; duration: number } | null>(null)
+  const [dragDelta, setDragDelta] = useState<{
+    time: number
+    duration: number
+  } | null>(null)
 
   const activeScene = story.scenes.find((s) => s.id === activeSceneId)
   const pxPerSec = PIXELS_PER_SECOND * zoom
@@ -82,56 +87,36 @@ export function Timeline() {
   // ── Calculate total duration ──
   const totalDuration = useMemo(() => {
     if (!activeScene) return 60
-    let maxTime = 60
-    activeScene.subtitles.forEach((s) => {
-      if (s.end > maxTime) maxTime = s.end
-    })
-    activeScene.videos.forEach((v) => {
-      const end = v.triggerTime + (v.duration || 30)
-      if (end > maxTime) maxTime = end
-    })
-    activeScene.characters.forEach((c) => {
-      const endSec = (c.delay + (c.duration || DEFAULT_CHAR_DURATION_SEC * 1000)) / 1000
-      if (endSec > maxTime) maxTime = endSec
-    })
-    activeScene.audio.forEach((a) => {
-      const endSec = ((a.delay || 0) + (a.duration || DEFAULT_AUDIO_DURATION_SEC * 1000)) / 1000
-      if (endSec > maxTime) maxTime = endSec
-    })
-    const cameraKfs = story.camera.guided?.[activeScene.id] || []
-    cameraKfs.forEach((kf) => {
-      if (kf.time + 10 > maxTime) maxTime = kf.time + 10
-    })
-    return Math.ceil(maxTime / 10) * 10 + 30
-  }, [activeScene, story.camera.guided])
+    const maxTime = chapterDuration(activeScene, story.camera.guided?.[activeScene.id], mediaDurations)
+    return Math.ceil(maxTime / 10) * 10 + 10
+  }, [activeScene, story.camera.guided, mediaDurations])
 
   const totalWidth = totalDuration * pxPerSec + 200
+
+  // Keep the playhead visible, including seeks made from the audience controls.
+  useEffect(() => {
+    const tracks = scrollRef.current
+    if (!tracks || !playbackPreview) return
+    const x = LABEL_WIDTH + timelinePosition * pxPerSec
+    if (x < tracks.scrollLeft + LABEL_WIDTH || x > tracks.scrollLeft + tracks.clientWidth - 24)
+      tracks.scrollLeft = Math.max(0, x - tracks.clientWidth * .3)
+  }, [timelinePosition, pxPerSec, playbackPreview])
 
   // ── Ruler click to scrub ──
   const handleRulerClick = useCallback(
     (e: React.MouseEvent) => {
       const rect = e.currentTarget.getBoundingClientRect()
-      const x = e.clientX - rect.left + (scrollRef.current?.scrollLeft || 0) - LABEL_WIDTH
+      const x =
+        e.clientX -
+        rect.left -
+        LABEL_WIDTH
       const time = Math.max(0, x / pxPerSec)
-      setTimelinePosition(time)
+      setIsPlaying(false)
+      useStore.getState().setShowCameraPiP(true)
+      setTimelinePosition(Math.min(time, chapterDuration(activeScene, story.camera.guided?.[activeSceneId || ''], mediaDurations)))
     },
-    [pxPerSec, setTimelinePosition]
+    [pxPerSec, setTimelinePosition, setIsPlaying, activeScene, activeSceneId, story.camera.guided, mediaDurations]
   )
-
-  // ── Playback timer ──
-  useEffect(() => {
-    if (!isPlaying) return
-    const start = performance.now()
-    const startTime = timelinePosition
-    let raf: number
-    const tick = () => {
-      const elapsed = (performance.now() - start) / 1000
-      setTimelinePosition(startTime + elapsed)
-      raf = requestAnimationFrame(tick)
-    }
-    raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
-  }, [isPlaying]) // intentionally only isPlaying
 
   // ── Global mouse handlers for dragging ──
   useEffect(() => {
@@ -142,7 +127,10 @@ export function Timeline() {
       const dtSec = dx / pxPerSec
 
       if (drag.action === 'move') {
-        const newStart = snap(Math.max(0, drag.startTimeSec + dtSec), SNAP_SECONDS)
+        const newStart = snap(
+          Math.max(0, drag.startTimeSec + dtSec),
+          SNAP_SECONDS
+        )
         setDragDelta({ time: newStart - drag.startTimeSec, duration: 0 })
       } else if (drag.action === 'resize-left') {
         const maxShrink = drag.startDurSec - SNAP_SECONDS
@@ -184,43 +172,61 @@ export function Timeline() {
         const sub = activeScene.subtitles.find((s) => s.id === id)
         if (!sub) return
         const newStart = round2(Math.max(0, sub.start + delta.time))
-        const newEnd = round2(Math.max(newStart + SNAP_SECONDS, sub.end + delta.time + delta.duration))
+        const newEnd = round2(
+          Math.max(
+            newStart + SNAP_SECONDS,
+            sub.end + delta.time + delta.duration
+          )
+        )
         updateSubtitle(sid, id, { start: newStart, end: newEnd })
       } else if (kind === 'vid') {
         const vid = activeScene.videos.find((v) => v.id === id)
         if (!vid) return
         const newTrigger = round2(Math.max(0, vid.triggerTime + delta.time))
-        const newDur = round2(Math.max(SNAP_SECONDS, (vid.duration || 30) + delta.duration))
+        const newDur = round2(
+          Math.max(SNAP_SECONDS, (vid.duration || mediaDurations[vid.url] || 30) + delta.duration)
+        )
         updateVideo(sid, id, { triggerTime: newTrigger, duration: newDur })
       } else if (kind === 'char') {
         const char = activeScene.characters.find((c) => c.id === id)
         if (!char) return
         const curStartSec = (char.delay || 0) / 1000
-        const curDurSec = (char.duration || DEFAULT_CHAR_DURATION_SEC * 1000) / 1000
+        const curDurSec =
+          (char.duration || chapterDuration(activeScene, story.camera.guided?.[activeScene.id], mediaDurations) * 1000) / 1000
         const newStartSec = Math.max(0, curStartSec + delta.time)
         const newDurSec = Math.max(SNAP_SECONDS, curDurSec + delta.duration)
         updateCharacter(sid, id, {
           delay: round2(newStartSec * 1000),
-          duration: round2(newDurSec * 1000),
+          duration: round2(newDurSec * 1000)
         })
       } else if (kind === 'audio') {
         const audioTrack = activeScene.audio.find((a) => a.id === id)
         if (!audioTrack) return
         const curDelaySec = (audioTrack.delay || 0) / 1000
-        const curDurSec = (audioTrack.duration || DEFAULT_AUDIO_DURATION_SEC * 1000) / 1000
+        const curDurSec =
+          (audioTrack.duration ? audioTrack.duration / 1000 : mediaDurations[audioTrack.file] || chapterDuration(activeScene, story.camera.guided?.[activeScene.id], mediaDurations))
         const newDelaySec = Math.max(0, curDelaySec + delta.time)
         const newDurSec = Math.max(SNAP_SECONDS, curDurSec + delta.duration)
         updateAudio(sid, id, {
           delay: round2(newDelaySec * 1000),
-          duration: round2(newDurSec * 1000),
+          duration: round2(newDurSec * 1000)
         })
       } else if (kind === 'cam') {
         const newTime = round2(Math.max(0, d.startTimeSec + delta.time))
-        const newDurMs = round2(Math.max(100, (d.startDurSec + delta.duration) * 1000))
+        const newDurMs = round2(
+          Math.max(100, (d.startDurSec + delta.duration) * 1000)
+        )
         updateCameraKeyframe(sid, id, { time: newTime, duration: newDurMs })
       }
     },
-    [activeScene, updateSubtitle, updateVideo, updateCharacter, updateCameraKeyframe, updateAudio]
+    [
+      activeScene,
+      updateSubtitle,
+      updateVideo,
+      updateCharacter,
+      updateCameraKeyframe,
+      updateAudio
+    ]
   )
 
   // ── Start a drag ──
@@ -239,7 +245,7 @@ export function Timeline() {
         action,
         startMouseX: e.pageX,
         startTimeSec: timeSec,
-        startDurSec: durationSec,
+        startDurSec: durationSec
       })
       setDragDelta(null)
     },
@@ -279,7 +285,7 @@ export function Timeline() {
     }
     return {
       left: Math.max(0, t) * pxPerSec,
-      width: Math.max(d * pxPerSec, 6),
+      width: Math.max(d * pxPerSec, 6)
     }
   }
 
@@ -287,26 +293,36 @@ export function Timeline() {
     <div className="timeline-container">
       {/* ── Toolbar ── */}
       <div className="timeline-toolbar">
-        <button className="btn btn-sm" onClick={() => setTimelinePosition(0)} title="Reset">
-          ⏮
+        <button
+          className="btn btn-sm"
+          onClick={() => { setIsPlaying(false); setTimelinePosition(0) }}
+          title="Reset playhead"
+        >
+          Reset
         </button>
         <button
           className={`btn btn-sm ${isPlaying ? 'btn-danger' : 'btn-primary'}`}
-          onClick={() => setIsPlaying(!isPlaying)}
+          onClick={() => {
+            if (!isPlaying && timelinePosition >= chapterDuration(activeScene, story.camera.guided?.[activeScene.id], mediaDurations)) setTimelinePosition(0)
+            setIsPlaying(!isPlaying)
+          }}
         >
-          {isPlaying ? '⏸' : '▶'}
+          {isPlaying ? 'Pause timeline' : 'Play timeline'}
         </button>
+        {playbackPreview && <button className="btn btn-sm" onClick={stopPlayback} title="Stop playback and show all objects for editing">Back to editing</button>}
         <span
           style={{
             color: 'var(--text-secondary)',
             fontSize: 11,
             fontFamily: 'var(--font-mono)',
-            minWidth: 48,
+            minWidth: 48
           }}
         >
           {formatTime(timelinePosition)}
         </span>
-        <span style={{ fontSize: 10, color: 'var(--text-muted)', marginLeft: 4 }}>
+        <span
+          style={{ fontSize: 10, color: 'var(--text-muted)', marginLeft: 4 }}
+        >
           snap {SNAP_SECONDS}s
         </span>
         <div style={{ flex: 1 }} />
@@ -316,7 +332,7 @@ export function Timeline() {
             color: 'var(--text-secondary)',
             display: 'flex',
             alignItems: 'center',
-            gap: 4,
+            gap: 4
           }}
         >
           Zoom
@@ -336,10 +352,20 @@ export function Timeline() {
       <div
         className="timeline-tracks"
         ref={scrollRef}
-        style={{ cursor: drag ? (drag.action === 'move' ? 'grabbing' : 'col-resize') : undefined }}
+        style={{
+          cursor: drag
+            ? drag.action === 'move'
+              ? 'grabbing'
+              : 'col-resize'
+            : undefined
+        }}
       >
         {/* Ruler */}
-        <div className="timeline-ruler" style={{ width: totalWidth }} onClick={handleRulerClick}>
+        <div
+          className="timeline-ruler"
+          style={{ width: totalWidth }}
+          onClick={handleRulerClick}
+        >
           {Array.from({ length: Math.ceil(totalDuration / 10) + 1 }, (_, i) => {
             const time = i * 10
             return (
@@ -351,7 +377,7 @@ export function Timeline() {
                   top: 6,
                   fontSize: 10,
                   color: 'var(--text-muted)',
-                  transform: 'translateX(-50%)',
+                  transform: 'translateX(-50%)'
                 }}
               >
                 {formatTime(time)}
@@ -370,26 +396,42 @@ export function Timeline() {
                   bottom: 0,
                   width: 1,
                   background: 'rgba(255,255,255,0.04)',
-                  pointerEvents: 'none',
+                  pointerEvents: 'none'
                 }}
               />
             ))}
-          <div className="timeline-playhead" style={{ left: playheadX, height: '100%' }} />
+          <div
+            className="timeline-playhead"
+            style={{ left: playheadX, height: '100%' }}
+          />
         </div>
 
         {/* ─── Audio tracks ─── */}
         {activeScene.audio.map((aud) => {
           const key = `audio::${aud.id}`
           const startSec = (aud.delay || 0) / 1000
-          const durSec = (aud.duration || DEFAULT_AUDIO_DURATION_SEC * 1000) / 1000
+          const durSec =
+            (aud.duration ? aud.duration / 1000 : mediaDurations[aud.file] || chapterDuration(activeScene, story.camera.guided?.[activeScene.id], mediaDurations))
           return (
-            <Track key={key} label={`🔊 ${aud.id.slice(0, 8)}`} width={totalWidth}>
+            <Track
+              key={key}
+              label={` ${aud.id.slice(0, 8)}`}
+              width={totalWidth}
+            >
               <DraggableBlock
                 blockKey={key}
                 className="timeline-block audio"
                 style={blockStyle(key, startSec, durSec)}
-                onClick={() => setSelection({ type: 'audio', sceneId: activeScene.id, itemId: aud.id })}
-                onDragStart={(e, action) => beginDrag(e, key, action, startSec, durSec)}
+                onClick={() =>
+                  setSelection({
+                    type: 'audio',
+                    sceneId: activeScene.id,
+                    itemId: aud.id
+                  })
+                }
+                onDragStart={(e, action) =>
+                  beginDrag(e, key, action, startSec, durSec)
+                }
                 isDragging={drag?.blockKey === key}
                 resizable
               >
@@ -400,7 +442,7 @@ export function Timeline() {
         })}
 
         {/* ─── Subtitle track ─── */}
-        <Track label="💬 Subs" width={totalWidth}>
+        <Track label=" Subs" width={totalWidth}>
           {activeScene.subtitles.map((sub) => {
             const key = `sub::${sub.id}`
             const dur = sub.end - sub.start
@@ -412,9 +454,15 @@ export function Timeline() {
                 style={blockStyle(key, sub.start, dur)}
                 title={sub.text[language] || sub.text.en || ''}
                 onClick={() =>
-                  setSelection({ type: 'subtitle' as any, sceneId: activeScene.id, itemId: sub.id })
+                  setSelection({
+                    type: 'subtitle' as any,
+                    sceneId: activeScene.id,
+                    itemId: sub.id
+                  })
                 }
-                onDragStart={(e, action) => beginDrag(e, key, action, sub.start, dur)}
+                onDragStart={(e, action) =>
+                  beginDrag(e, key, action, sub.start, dur)
+                }
                 isDragging={drag?.blockKey === key}
                 resizable
               >
@@ -425,10 +473,10 @@ export function Timeline() {
         </Track>
 
         {/* ─── Video track ─── */}
-        <Track label="📹 Video" width={totalWidth}>
+        <Track label=" Video" width={totalWidth}>
           {activeScene.videos.map((vid) => {
             const key = `vid::${vid.id}`
-            const dur = vid.duration || 30
+            const dur = vid.duration || mediaDurations[vid.url] || 30
             return (
               <DraggableBlock
                 key={key}
@@ -436,9 +484,15 @@ export function Timeline() {
                 className="timeline-block video"
                 style={blockStyle(key, vid.triggerTime, dur)}
                 onClick={() =>
-                  setSelection({ type: 'video', sceneId: activeScene.id, itemId: vid.id })
+                  setSelection({
+                    type: 'video',
+                    sceneId: activeScene.id,
+                    itemId: vid.id
+                  })
                 }
-                onDragStart={(e, action) => beginDrag(e, key, action, vid.triggerTime, dur)}
+                onDragStart={(e, action) =>
+                  beginDrag(e, key, action, vid.triggerTime, dur)
+                }
                 isDragging={drag?.blockKey === key}
                 resizable
               >
@@ -449,11 +503,12 @@ export function Timeline() {
         </Track>
 
         {/* ─── Character track ─── */}
-        <Track label="🧑 Chars" width={totalWidth}>
+        <Track label=" Chars" width={totalWidth}>
           {activeScene.characters.map((char) => {
             const key = `char::${char.id}`
             const startSec = (char.delay || 0) / 1000
-            const durSec = (char.duration || DEFAULT_CHAR_DURATION_SEC * 1000) / 1000
+            const durSec =
+              (char.duration ? char.duration / 1000 : Math.max(.5, chapterDuration(activeScene, story.camera.guided?.[activeScene.id], mediaDurations) - startSec))
             return (
               <DraggableBlock
                 key={key}
@@ -461,9 +516,15 @@ export function Timeline() {
                 className="timeline-block character"
                 style={blockStyle(key, startSec, durSec)}
                 onClick={() =>
-                  setSelection({ type: 'character', sceneId: activeScene.id, itemId: char.id })
+                  setSelection({
+                    type: 'character',
+                    sceneId: activeScene.id,
+                    itemId: char.id
+                  })
                 }
-                onDragStart={(e, action) => beginDrag(e, key, action, startSec, durSec)}
+                onDragStart={(e, action) =>
+                  beginDrag(e, key, action, startSec, durSec)
+                }
                 isDragging={drag?.blockKey === key}
                 resizable
               >
@@ -474,7 +535,7 @@ export function Timeline() {
         </Track>
 
         {/* ─── Camera track ─── */}
-        <Track label="📷 Cam" width={totalWidth}>
+        <Track label=" Cam" width={totalWidth}>
           {cameraKfs.map((kf) => {
             const key = `cam::${kf.id}`
             const durSec = (kf.duration || 1000) / 1000
@@ -488,27 +549,32 @@ export function Timeline() {
                   setSelection({
                     type: 'cameraKeyframe',
                     sceneId: activeScene.id,
-                    itemId: kf.id,
+                    itemId: kf.id
                   })
                 }
-                onDragStart={(e, action) => beginDrag(e, key, action, kf.time, durSec)}
+                onDragStart={(e, action) =>
+                  beginDrag(e, key, action, kf.time, durSec)
+                }
                 isDragging={drag?.blockKey === key}
                 resizable
               >
-                📷 {formatTime(kf.time)}
+                {formatTime(kf.time)}
               </DraggableBlock>
             )
           })}
         </Track>
 
         {/* ─── Lighting track ─── */}
-        <Track label="💡 Light" width={totalWidth}>
+        <Track label=" Light" width={totalWidth}>
           {activeScene.lighting.flicker && (
             <div
               className="timeline-block light"
               style={{
                 left: activeScene.lighting.flicker.triggerTime * pxPerSec,
-                width: Math.max(activeScene.lighting.flicker.duration * pxPerSec, 10),
+                width: Math.max(
+                  activeScene.lighting.flicker.duration * pxPerSec,
+                  10
+                )
               }}
             >
               Flicker
@@ -521,7 +587,7 @@ export function Timeline() {
                 left: 0,
                 width: Math.max(totalDuration * pxPerSec * 0.9, 40),
                 background: 'rgba(100,200,255,0.3)',
-                borderColor: 'rgba(100,200,255,0.6)',
+                borderColor: 'rgba(100,200,255,0.6)'
               }}
             >
               Walking Tour
@@ -533,7 +599,11 @@ export function Timeline() {
               className="timeline-block light"
               style={{ left: 0, width: 50 }}
               onClick={() =>
-                setSelection({ type: 'spotlight', sceneId: activeScene.id, itemId: spot.id })
+                setSelection({
+                  type: 'spotlight',
+                  sceneId: activeScene.id,
+                  itemId: spot.id
+                })
               }
             >
               {spot.id}
@@ -544,7 +614,12 @@ export function Timeline() {
         {/* Playhead across all tracks */}
         <div
           className="timeline-playhead"
-          style={{ left: playheadX, top: 0, height: '100%', position: 'absolute' }}
+          style={{
+            left: playheadX,
+            top: 0,
+            height: '100%',
+            position: 'absolute'
+          }}
         />
       </div>
     </div>
@@ -575,7 +650,7 @@ function DraggableBlock({
   isDragging,
   resizable,
   title,
-  children,
+  children
 }: DraggableBlockProps) {
   const HANDLE = 6
 
@@ -610,7 +685,7 @@ function DraggableBlock({
         userSelect: 'none',
         boxShadow: isDragging ? '0 0 8px rgba(0,183,255,0.5)' : undefined,
         opacity: isDragging ? 0.85 : undefined,
-        zIndex: isDragging ? 10 : undefined,
+        zIndex: isDragging ? 10 : undefined
       }}
       title={title}
       onClick={(e) => {
@@ -636,7 +711,7 @@ function DraggableBlock({
               width: HANDLE,
               cursor: 'col-resize',
               borderRadius: '3px 0 0 3px',
-              background: isDragging ? 'rgba(255,255,255,0.2)' : 'transparent',
+              background: isDragging ? 'rgba(255,255,255,0.2)' : 'transparent'
             }}
           />
           <div
@@ -648,7 +723,7 @@ function DraggableBlock({
               width: HANDLE,
               cursor: 'col-resize',
               borderRadius: '0 3px 3px 0',
-              background: isDragging ? 'rgba(255,255,255,0.2)' : 'transparent',
+              background: isDragging ? 'rgba(255,255,255,0.2)' : 'transparent'
             }}
           />
         </>
@@ -665,7 +740,7 @@ function DraggableBlock({
 function Track({
   label,
   width,
-  children,
+  children
 }: {
   label: string
   width: number

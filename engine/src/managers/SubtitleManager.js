@@ -1,3 +1,4 @@
+import { captionStyles } from '../ui/captionStyle.js'
 /**
  * SubtitleManager - Time-synced subtitle display
  * Ported from Shadows of the Stabilisation Point
@@ -6,24 +7,32 @@
 
 export class SubtitleManager {
   constructor(options = {}) {
+    this.captionStyle = options.captionStyle
+    this.captionFont = options.captionFont || 'sans-serif'
     this.language = options.defaultLanguage || 'en'
     this.subtitles = new Map() // Map of sceneId -> { en: [...], fi: [...] }
     this.currentScene = null
     this.currentTime = 0
     this.isPlaying = false
     this.totalScenes = options.totalScenes || 4
-    
+
     // Create DOM elements
     this.container = null
     this.subtitleElement = null
     this.sceneIndicators = []
-    
+
     this.createElements()
-    
+    this.applyAppearance = () => {
+      const styles = captionStyles(this.captionStyle, this.captionFont, window.innerWidth <= 600)
+      Object.assign(this.container.style, styles.container, { position: 'fixed' })
+      Object.assign(this.subtitleElement.style, styles.text, {whiteSpace: 'pre-line'})
+    }
+    this.applyAppearance()
+    window.addEventListener('resize', this.applyAppearance)
+
     // Listen for language changes
-    document.addEventListener('languageChanged', (e) => {
-      this.setLanguage(e.detail.language)
-    })
+    this.onLanguageChanged = (e) => this.setLanguage(e.detail.language)
+    document.addEventListener('languageChanged', this.onLanguageChanged)
   }
 
   /**
@@ -77,7 +86,7 @@ export class SubtitleManager {
    */
   createSceneIndicators() {
     let indicatorsContainer = document.getElementById('scene-indicators')
-    
+
     if (!indicatorsContainer) {
       indicatorsContainer = document.createElement('div')
       indicatorsContainer.id = 'scene-indicators'
@@ -115,7 +124,8 @@ export class SubtitleManager {
    */
   loadSubtitles(scenes) {
     this.subtitles.clear()
-    
+    this.sceneIds = scenes.map((s) => s.id)
+
     scenes.forEach((scene) => {
       if (scene.subtitles) {
         this.subtitles.set(scene.id, scene.subtitles)
@@ -148,6 +158,7 @@ export class SubtitleManager {
     const sceneSubtitles = this.subtitles.get(sceneId)
     if (!sceneSubtitles) {
       this.subtitleElement.textContent = ''
+      this.subtitleElement.style.display = 'none'
       return
     }
 
@@ -158,12 +169,13 @@ export class SubtitleManager {
     }
 
     // Find current subtitle
-    const currentSubtitle = languageSubtitles.find(
-      sub => currentTime >= sub.start && currentTime <= sub.end
-    )
+    const currentSubtitle = languageSubtitles.filter(
+      (sub) => currentTime >= sub.start && currentTime < sub.end && sub.text?.trim()
+    ).map(sub => sub.text).join('\n')
 
+    this.subtitleElement.style.display = currentSubtitle ? 'block' : 'none'
     if (currentSubtitle) {
-      this.subtitleElement.textContent = currentSubtitle.text
+      this.subtitleElement.textContent = currentSubtitle
     } else {
       this.subtitleElement.textContent = ''
     }
@@ -173,12 +185,8 @@ export class SubtitleManager {
    * Update scene indicators
    */
   updateSceneIndicators(sceneId) {
-    // Extract scene number from ID (e.g., "scene1" -> 1)
-    const match = sceneId.match(/scene(\d+)/i)
-    if (!match) return
+    const sceneNumber = (this.sceneIds || []).indexOf(sceneId) + 1
 
-    const sceneNumber = parseInt(match[1], 10)
-    
     this.sceneIndicators.forEach((indicator, index) => {
       indicator.style.backgroundColor = index < sceneNumber ? '#fff' : '#666'
     })
@@ -231,6 +239,8 @@ export class SubtitleManager {
    * Clean up
    */
   dispose() {
+    window.removeEventListener('resize', this.applyAppearance)
+    document.removeEventListener('languageChanged', this.onLanguageChanged)
     if (this.container && this.container.parentNode) {
       this.container.parentNode.removeChild(this.container)
     }

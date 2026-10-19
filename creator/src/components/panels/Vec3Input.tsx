@@ -1,3 +1,4 @@
+import { Icon } from '../Icon'
 /**
  * Reusable Vec3 input component for editing position/rotation/scale
  */
@@ -10,24 +11,31 @@ interface Vec3InputProps {
   labels?: [string, string, string]
 }
 
-export function Vec3Input({ label, value, onChange, step = 0.01, labels = ['X', 'Y', 'Z'] }: Vec3InputProps) {
+export function Vec3Input({
+  label,
+  value,
+  onChange,
+  step = 0.01,
+  labels = ['X', 'Y', 'Z']
+}: Vec3InputProps) {
   const handleChange = (index: number, val: string) => {
     const num = parseFloat(val)
-    if (isNaN(num)) return
+    if (!Number.isFinite(num)) return
     const next: [number, number, number] = [...value]
     next[index] = num
     onChange(next)
   }
 
   return (
-    <div className="form-group">
-      <label className="form-label">{label}</label>
+    <details className="form-group vector-setting">
+      <summary><Icon name={/rotat/i.test(label)?'rotate':/scale/i.test(label)?'scale':'move'} size={20}/>{label}</summary>
       <div className="vec3-input">
         {[0, 1, 2].map((i) => (
-          <div key={i} style={{ flex: 1 }}>
+          <div key={i} style={{ flex: 1, minWidth: 0 }}>
             <span className="vec3-label">{labels[i]}</span>
             <input
               type="number"
+              aria-label={`${label} ${labels[i]}`}
               step={step}
               value={value[i]}
               onChange={(e) => handleChange(i, e.target.value)}
@@ -35,6 +43,6 @@ export function Vec3Input({ label, value, onChange, step = 0.01, labels = ['X', 
           </div>
         ))}
       </div>
-    </div>
+    </details>
   )
 }

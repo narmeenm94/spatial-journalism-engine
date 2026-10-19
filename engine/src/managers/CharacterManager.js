@@ -1,7 +1,7 @@
 /**
  * CharacterManager - Handles loading and management of 3D characters and objects
  * Extracted and refactored from Shadows of the Stabilisation Point
- * 
+ *
  * IMPORTANT: Character models with animations (skinned meshes) must be loaded
  * fresh each time via GLTFLoader. Cloning gltf.scene doesn't properly handle
  * bone references in skinned meshes, making characters invisible.
@@ -23,7 +23,7 @@ export class CharacterManager {
     this.sceneCharacterMap = new Map() // sceneId -> Set of charIds
     this.sceneObjectMap = new Map() // sceneId -> Set of objIds
     this.currentSceneId = null
-    
+
     // Create a dedicated GLTFLoader for fresh character loads
     if (typeof THREE !== 'undefined' && THREE.GLTFLoader) {
       this.gltfLoader = new THREE.GLTFLoader()
@@ -61,7 +61,10 @@ export class CharacterManager {
         url,
         (gltf) => resolve(gltf),
         undefined,
-        (error) => reject(new Error(`Failed to load model ${url}: ${error?.message || error}`))
+        (error) =>
+          reject(
+            new Error(`Failed to load model ${url}: ${error?.message || error}`)
+          )
       )
     })
   }
@@ -78,17 +81,29 @@ export class CharacterManager {
       return this.characters.get(charId).model
     }
 
-    const { model, position, scale, rotation, animation, delay = 0, opacity = 0.7 } = options
+    const {
+      model,
+      position,
+      scale,
+      rotation,
+      animation,
+      delay = 0,
+      opacity = 0.7
+    } = options
 
     try {
-      console.log(`  CharacterManager: Loading character ${charId} from ${model}`)
-      
+      console.log(
+        `  CharacterManager: Loading character ${charId} from ${model}`
+      )
+
       // Load model FRESH each time - critical for animated skinned meshes
       // Do NOT use assetLoader cache - cloning gltf.scene breaks bone references
       const gltf = await this.loadModelFresh(model)
-      
+
       if (!gltf || !gltf.scene) {
-        console.error(`  CharacterManager: No scene in loaded GLTF for ${charId}`)
+        console.error(
+          `  CharacterManager: No scene in loaded GLTF for ${charId}`
+        )
         return null
       }
 
@@ -98,15 +113,15 @@ export class CharacterManager {
       // Apply transforms
       if (position) {
         characterModel.position.set(
-          position.x || 0, 
-          position.y || 0, 
+          position.x || 0,
+          position.y || 0,
           position.z || 0
         )
       }
       if (rotation) {
         characterModel.rotation.set(
-          rotation.x || 0, 
-          rotation.y || 0, 
+          rotation.x || 0,
+          rotation.y || 0,
           rotation.z || 0
         )
       }
@@ -114,23 +129,35 @@ export class CharacterManager {
         if (typeof scale === 'number') {
           characterModel.scale.set(scale, scale, scale)
         } else {
-          characterModel.scale.set(scale.x || 1, scale.y || 1, scale.z || 1)
+          characterModel.scale.set(scale.x ?? 1, scale.y ?? 1, scale.z ?? 1)
         }
       }
 
-      console.log(`  Position: (${characterModel.position.x}, ${characterModel.position.y}, ${characterModel.position.z})`)
-      console.log(`  Scale: (${characterModel.scale.x}, ${characterModel.scale.y}, ${characterModel.scale.z})`)
-      console.log(`  Rotation: (${characterModel.rotation.x}, ${characterModel.rotation.y}, ${characterModel.rotation.z})`)
+      console.log(
+        `  Position: (${characterModel.position.x}, ${characterModel.position.y}, ${characterModel.position.z})`
+      )
+      console.log(
+        `  Scale: (${characterModel.scale.x}, ${characterModel.scale.y}, ${characterModel.scale.z})`
+      )
+      console.log(
+        `  Rotation: (${characterModel.rotation.x}, ${characterModel.rotation.y}, ${characterModel.rotation.z})`
+      )
 
       // Set up materials - make transparent/ghostly
       // Start at opacity 0 for fade-in effect (SceneManager calls fadeInCharacter after loading)
       characterModel.traverse((child) => {
         if (child.isMesh && child.material) {
           // Clone material to avoid affecting shared instances
-          child.material = child.material.clone()
-          child.material.transparent = true
-          child.material.opacity = 0  // Start invisible - SceneManager will fade in
-          child.material.depthWrite = false
+          const prepare = (material) => {
+            const copy = material.clone()
+            copy.transparent = true
+            copy.opacity = 0
+            copy.depthWrite = false
+            return copy
+          }
+          child.material = Array.isArray(child.material)
+            ? child.material.map(prepare)
+            : prepare(child.material)
         }
       })
 
@@ -143,7 +170,7 @@ export class CharacterManager {
         this.mixers.set(charId, mixer)
 
         // Try to find the specific animation by name
-        const clip = gltf.animations.find(anim => anim.name === animation)
+        const clip = gltf.animations.find((anim) => anim.name === animation)
         if (clip) {
           const action = mixer.clipAction(clip)
           action.setLoop(THREE.LoopRepeat, Infinity)
@@ -151,34 +178,43 @@ export class CharacterManager {
           console.log(`  Playing animation: ${animation}`)
         } else {
           // If named animation not found, play first animation as fallback
-          console.warn(`  Animation "${animation}" not found, available: ${gltf.animations.map(a => a.name).join(', ')}`)
+          console.warn(
+            `  Animation "${animation}" not found, available: ${gltf.animations.map((a) => a.name).join(', ')}`
+          )
           if (gltf.animations.length > 0) {
             const defaultAction = mixer.clipAction(gltf.animations[0])
             defaultAction.setLoop(THREE.LoopRepeat, Infinity)
             defaultAction.play()
-            console.log(`  Playing fallback animation: ${gltf.animations[0].name}`)
+            console.log(
+              `  Playing fallback animation: ${gltf.animations[0].name}`
+            )
           }
         }
       } else if (gltf.animations && gltf.animations.length > 0 && !animation) {
-        console.log(`  No animation specified for ${charId}, keeping default pose (available: ${gltf.animations.map(a => a.name).join(', ')})`)
+        console.log(
+          `  No animation specified for ${charId}, keeping default pose (available: ${gltf.animations.map((a) => a.name).join(', ')})`
+        )
       }
 
       // Add to parent object (room model) - matches original behavior
       this.parentObject.add(characterModel)
       this.characters.set(charId, { model: characterModel, gltf, options })
-      
+
       // Track scene membership
       if (this.currentSceneId) {
-        const sceneChars = this.sceneCharacterMap.get(this.currentSceneId) || new Set()
+        const sceneChars =
+          this.sceneCharacterMap.get(this.currentSceneId) || new Set()
         sceneChars.add(charId)
         this.sceneCharacterMap.set(this.currentSceneId, sceneChars)
       }
-      
+
       // Log world position for debugging
       const worldPos = new THREE.Vector3()
       characterModel.getWorldPosition(worldPos)
-      console.log(`  Character ${charId} added. World position: (${worldPos.x.toFixed(2)}, ${worldPos.y.toFixed(2)}, ${worldPos.z.toFixed(2)})`)
-      
+      console.log(
+        `  Character ${charId} added. World position: (${worldPos.x.toFixed(2)}, ${worldPos.y.toFixed(2)}, ${worldPos.z.toFixed(2)})`
+      )
+
       return characterModel
     } catch (error) {
       console.error(`Failed to load character ${charId}:`, error)
@@ -206,26 +242,34 @@ export class CharacterManager {
 
       // Apply transforms
       if (position) {
-        objectModel.position.set(position.x || 0, position.y || 0, position.z || 0)
+        objectModel.position.set(
+          position.x || 0,
+          position.y || 0,
+          position.z || 0
+        )
       }
       if (rotation) {
-        objectModel.rotation.set(rotation.x || 0, rotation.y || 0, rotation.z || 0)
+        objectModel.rotation.set(
+          rotation.x || 0,
+          rotation.y || 0,
+          rotation.z || 0
+        )
       }
       if (scale) {
         if (typeof scale === 'number') {
           objectModel.scale.set(scale, scale, scale)
         } else {
-          objectModel.scale.set(scale.x || 1, scale.y || 1, scale.z || 1)
+          objectModel.scale.set(scale.x ?? 1, scale.y ?? 1, scale.z ?? 1)
         }
       }
 
       // Set up materials
       objectModel.traverse((child) => {
         if (child.isMesh && child.material) {
-          child.material = child.material.clone()
-          child.material.transparent = true
-          child.material.opacity = 1.0
-          child.material.depthWrite = false
+          child.geometry = child.geometry.clone()
+          child.material = Array.isArray(child.material)
+            ? child.material.map((m) => m.clone())
+            : child.material.clone()
         }
       })
 
@@ -233,7 +277,7 @@ export class CharacterManager {
       if (gltf.animations && gltf.animations.length > 0 && animation) {
         const mixer = new THREE.AnimationMixer(objectModel)
         this.mixers.set(objectId, mixer)
-        
+
         const clip = THREE.AnimationClip.findByName(gltf.animations, animation)
         if (clip) {
           mixer.clipAction(clip).play()
@@ -244,14 +288,15 @@ export class CharacterManager {
 
       this.parentObject.add(objectModel)
       this.objects.set(objectId, { model: objectModel, gltf, options })
-      
+
       // Track scene membership
       if (this.currentSceneId) {
-        const sceneObjs = this.sceneObjectMap.get(this.currentSceneId) || new Set()
+        const sceneObjs =
+          this.sceneObjectMap.get(this.currentSceneId) || new Set()
         sceneObjs.add(objectId)
         this.sceneObjectMap.set(this.currentSceneId, sceneObjs)
       }
-      
+
       return objectModel
     } catch (error) {
       console.error(`Failed to load object ${objectId}:`, error)
@@ -280,7 +325,7 @@ export class CharacterManager {
     if (!charData) return
 
     const character = charData.model
-    
+
     // Set initial opacity to 0
     character.traverse((child) => {
       if (child.isMesh && child.material) {
@@ -334,7 +379,7 @@ export class CharacterManager {
     const animate = () => {
       const elapsed = performance.now() - startTime
       const progress = Math.min(elapsed / duration, 1)
-      
+
       // Linear fade for slow, consistent transition (matches original)
       const currentOpacity = startOpacity * (1 - progress)
 
@@ -383,13 +428,15 @@ export class CharacterManager {
     const animate = () => {
       const elapsed = performance.now() - startTime
       const progress = Math.min(elapsed / duration, 1)
-      
+
       // Ease in-out
-      const easeProgress = progress < 0.5
-        ? 2 * progress * progress
-        : 1 - Math.pow(-2 * progress + 2, 2) / 2
-      
-      const currentOpacity = startOpacity + (targetOpacity - startOpacity) * easeProgress
+      const easeProgress =
+        progress < 0.5
+          ? 2 * progress * progress
+          : 1 - Math.pow(-2 * progress + 2, 2) / 2
+
+      const currentOpacity =
+        startOpacity + (targetOpacity - startOpacity) * easeProgress
 
       model.traverse((child) => {
         if (child.isMesh && child.material) {
@@ -442,7 +489,7 @@ export class CharacterManager {
         if (child.geometry) child.geometry.dispose()
         if (child.material) {
           if (Array.isArray(child.material)) {
-            child.material.forEach(m => m.dispose())
+            child.material.forEach((m) => m.dispose())
           } else {
             child.material.dispose()
           }
@@ -458,7 +505,7 @@ export class CharacterManager {
   removeSceneCharacters(sceneId) {
     const charIds = this.sceneCharacterMap.get(sceneId)
     if (charIds) {
-      charIds.forEach(charId => {
+      charIds.forEach((charId) => {
         this.removeCharacter(charId)
       })
       this.sceneCharacterMap.delete(sceneId)
@@ -466,7 +513,7 @@ export class CharacterManager {
 
     const objIds = this.sceneObjectMap.get(sceneId)
     if (objIds) {
-      objIds.forEach(objId => {
+      objIds.forEach((objId) => {
         this.removeObject(objId)
       })
       this.sceneObjectMap.delete(sceneId)

@@ -1,3 +1,4 @@
+import { characterEndingTime } from '../ui/cinematicEnding.js'
 /**
  * SceneManager - Manages scene transitions, activation, and state
  * Ported from Shadows of the Stabilisation Point with full feature support
@@ -13,10 +14,10 @@ export class SceneManager {
     this.currentScene = null
     this.currentSceneId = null
     this.isTransitioning = false
-    
+
     // Dynamic lights created per-scene (cleaned up on deactivation)
     this._activeSceneLights = []
-    
+
     // Required managers
     this.engine = options.engine
     this.audioManager = options.audioManager
@@ -28,29 +29,29 @@ export class SceneManager {
     this.sceneEffects = options.sceneEffects
     this.interactionManager = options.interactionManager
     this.parser = options.parser
-    
+
     // Callbacks
     this.onSceneChange = options.onSceneChange
     this.onSceneStart = options.onSceneStart
     this.onSceneEnd = options.onSceneEnd
-    
+
     // Video trigger tracking
     this.videoTriggers = new Map()
     this.activeVideos = new Set()
-    
+
     // Positional audio tracking
     this.positionalAudioPosition = null
     this.audioWaypoints = null
     this.audioWaypointIndex = 0
-    
+
     // Ending condition tracking
     this.endingPlayed = false
     this.characterFadeInComplete = false
     this.endingCheckInterval = null
-    
+
     // Delayed character/effect timeouts (must be cleaned up on scene deactivation)
     this.pendingTimeouts = []
-    
+
     // Track last video in final scene for ending trigger
     this.lastVideoEndedCallback = null
   }
@@ -107,6 +108,7 @@ export class SceneManager {
     }
 
     this.isTransitioning = true
+    this.engine?.sceneButtons?.clear()
 
     try {
       // Deactivate current scene if exists
@@ -119,6 +121,11 @@ export class SceneManager {
       this.currentScene = scene
       this.currentSceneId = sceneId
       this._lastLogTime = -1
+      this.elapsed = 0
+      this.paused = false
+      this.sceneEnded = false
+      this.audioSchedule = []
+      this.characterSchedule = []
 
       // Set current scene on character manager for tracking
       if (this.characterManager) {
@@ -162,9 +169,11 @@ export class SceneManager {
       if (this.onSceneStart) {
         this.onSceneStart(scene)
       }
-
     } catch (error) {
       console.error(`Failed to activate scene ${sceneId}:`, error)
+      await this.deactivateScene(sceneId)
+      this.engine?.showPlayerError?.(error)
+      this.engine?.onError?.(error)
     } finally {
       this.isTransitioning = false
     }
@@ -181,8 +190,12 @@ export class SceneManager {
     // their lighting is entirely managed by SceneEffects
     if (this.lightingManager && scene.lighting.modifiers) {
       this.lightingManager.applySceneLighting(scene.lighting.modifiers)
-    } else if (this.lightingManager && (scene.lighting.ambient !== undefined || 
-               scene.lighting.directional !== undefined || scene.lighting.hemisphere !== undefined)) {
+    } else if (
+      this.lightingManager &&
+      (scene.lighting.ambient !== undefined ||
+        scene.lighting.directional !== undefined ||
+        scene.lighting.hemisphere !== undefined)
+    ) {
       // Fallback: direct lighting values (less common)
       this.lightingManager.applySceneLighting({
         ambient: scene.lighting.ambient,
@@ -194,27 +207,43 @@ export class SceneManager {
     // Setup volumetric light if configured
     if (this.volumetricLighting && scene.lighting.spotlight) {
       const spotlight = scene.lighting.spotlight
-      const position = Array.isArray(spotlight.position) 
-        ? { x: spotlight.position[0], y: spotlight.position[1], z: spotlight.position[2] }
+      const position = Array.isArray(spotlight.position)
+        ? {
+            x: spotlight.position[0],
+            y: spotlight.position[1],
+            z: spotlight.position[2]
+          }
         : spotlight.position
-      
+
       if (spotlight.volumetric !== false) {
-        console.log(`Setting up volumetric lighting for ${scene.id} at`, position)
-        this.volumetricLighting.setupSceneLighting(scene.id, {
-          position: new THREE.Vector3(position.x, position.y, position.z),
-          volumetric: true,
-          volumetricOffset: spotlight.volumetricOffset || 13.5
-        }, this.engine.roomModel || this.engine.scene)
-        
+        console.log(
+          `Setting up volumetric lighting for ${scene.id} at`,
+          position
+        )
+        this.volumetricLighting.setupSceneLighting(
+          scene.id,
+          {
+            position: new THREE.Vector3(position.x, position.y, position.z),
+            volumetric: true,
+            volumetricOffset: spotlight.volumetricOffset || 13.5
+          },
+          this.engine.roomModel || this.engine.scene
+        )
+
         // Fade in after a brief delay
-        setTimeout(() => {
-          this.volumetricLighting.fadeIn(scene.id, 2000)
-        }, 500)
+        this.pendingTimeouts.push(
+          setTimeout(() => {
+            this.volumetricLighting.fadeIn(scene.id, 2000)
+          }, 500)
+        )
       }
     }
 
     // Create dynamic Three.js lights from the spotlights array (creator format)
-    if (scene.lighting.dynamicLights && scene.lighting.dynamicLights.length > 0) {
+    if (
+      scene.lighting.dynamicLights &&
+      scene.lighting.dynamicLights.length > 0
+    ) {
       this.setupDynamicLights(scene.lighting.dynamicLights)
     }
   }
@@ -227,13 +256,20 @@ export class SceneManager {
     const parentObject = this.engine.roomModel || this.engine.scene
     if (!parentObject) return
 
-    lights.forEach(cfg => {
+    lights.forEach((cfg) => {
       const color = new THREE.Color(cfg.color || '#ffffff')
       const pos = cfg.position || [0, 2, 0]
       let light
 
       if (cfg.type === 'spot') {
-        light = new THREE.SpotLight(color, cfg.intensity ?? 1, cfg.distance ?? 30, cfg.angle ?? 0.6, cfg.penumbra ?? 0.5, cfg.decay ?? 2)
+        light = new THREE.SpotLight(
+          color,
+          cfg.intensity ?? 1,
+          cfg.distance ?? 30,
+          cfg.angle ?? 0.6,
+          cfg.penumbra ?? 0.5,
+          cfg.decay ?? 2
+        )
         light.position.set(pos[0], pos[1], pos[2])
         if (cfg.target) {
           light.target.position.set(cfg.target[0], cfg.target[1], cfg.target[2])
@@ -253,7 +289,12 @@ export class SceneManager {
         }
       } else {
         // Default: PointLight
-        light = new THREE.PointLight(color, cfg.intensity ?? 1, cfg.distance ?? 30, cfg.decay ?? 2)
+        light = new THREE.PointLight(
+          color,
+          cfg.intensity ?? 1,
+          cfg.distance ?? 30,
+          cfg.decay ?? 2
+        )
         light.position.set(pos[0], pos[1], pos[2])
       }
 
@@ -261,7 +302,9 @@ export class SceneManager {
       parentObject.add(light)
       this._activeSceneLights.push(light)
 
-      console.log(`Created dynamic ${cfg.type || 'point'} light "${light.name}" at [${pos}] intensity=${cfg.intensity}`)
+      console.log(
+        `Created dynamic ${cfg.type || 'point'} light "${light.name}" at [${pos}] intensity=${cfg.intensity}`
+      )
     })
   }
 
@@ -271,7 +314,7 @@ export class SceneManager {
   removeDynamicLights() {
     if (!this._activeSceneLights || this._activeSceneLights.length === 0) return
     const parentObject = this.engine.roomModel || this.engine.scene
-    this._activeSceneLights.forEach(light => {
+    this._activeSceneLights.forEach((light) => {
       if (light.target && light.target.parent) {
         light.target.parent.remove(light.target)
       }
@@ -285,72 +328,20 @@ export class SceneManager {
    * Load scene characters
    */
   async loadSceneCharacters(scene) {
-    if (!this.characterManager) {
-      console.warn('CharacterManager not available, skipping character loading')
-      return
-    }
-    if (!scene.characters || scene.characters.length === 0) return
-
-    console.log(`Loading ${scene.characters.length} characters for ${scene.id}`)
-
-    for (const charConfig of scene.characters) {
-      try {
-        const charId = charConfig.id || `${scene.id}-char-${Math.random().toString(36).substr(2, 9)}`
-        
-        // Convert array positions to objects
-        const position = Array.isArray(charConfig.position)
-          ? { x: charConfig.position[0], y: charConfig.position[1], z: charConfig.position[2] }
-          : charConfig.position || { x: 0, y: 0, z: 0 }
-        
-        const rotation = charConfig.rotation
-          ? (Array.isArray(charConfig.rotation)
-            ? { x: charConfig.rotation[0], y: charConfig.rotation[1], z: charConfig.rotation[2] }
-            : charConfig.rotation)
-          : { x: 0, y: 0, z: 0 }
-
-        const modelUrl = this.parser?.resolvePath(charConfig.model, this.engine.story.project.assets.basePath) || charConfig.model
-        if (!modelUrl) {
-          console.warn(`  Skipping character ${charId} — no model path set`)
-          continue
-        }
-        console.log(`  Loading character ${charId}: ${modelUrl}`)
-
-        const resolvedConfig = {
-          ...charConfig,
-          position,
-          rotation,
-          model: modelUrl
-        }
-        
-        // Handle delay - don't await, load in background after delay
-        const targetOpacity = charConfig.opacity || 0.7
-        if (charConfig.delay && charConfig.delay > 0) {
-          const timeoutId = setTimeout(async () => {
-            // Check if this scene is still active before loading
-            if (this.currentSceneId !== scene.id) {
-              console.log(`  Skipping delayed character ${charId} - scene ${scene.id} no longer active`)
-              return
-            }
-            try {
-              await this.characterManager.loadCharacter(charId, { ...resolvedConfig, delay: 0 })
-              // Fade in character (matches original's fadeInCharacter call)
-              this.characterManager.fadeInCharacter(charId, 3000, targetOpacity)
-              console.log(`  Character ${charId} loaded after delay, fading in to opacity ${targetOpacity}`)
-            } catch (err) {
-              console.error(`  Failed to load delayed character ${charId}:`, err)
-            }
-          }, charConfig.delay)
-          this.pendingTimeouts.push(timeoutId)
-        } else {
-          await this.characterManager.loadCharacter(charId, resolvedConfig)
-          // Fade in character (matches original's fadeInCharacter call)
-          this.characterManager.fadeInCharacter(charId, 3000, targetOpacity)
-          console.log(`  Character ${charId} loaded, fading in to opacity ${targetOpacity}`)
-        }
-      } catch (error) {
-        console.error(`Failed to load character:`, error)
-        // Continue loading other characters
-      }
+    if (!this.characterManager) return
+    for (const config of scene.characters || []) {
+      if (!config.model) continue
+      const model = await this.characterManager.loadCharacter(config.id, {
+        ...config,
+        delay: 0,
+        model:
+          this.parser?.resolvePath(
+            config.model,
+            this.engine.story.project.assets.basePath
+          ) || config.model
+      })
+      if (!model) throw new Error('Could not load model: ' + config.model)
+      this.characterSchedule.push({ config, model })
     }
   }
 
@@ -361,18 +352,32 @@ export class SceneManager {
     if (!this.characterManager || !scene.objects) return
 
     for (const objConfig of scene.objects) {
-      const objId = objConfig.id || `${scene.id}-obj-${Math.random().toString(36).substr(2, 9)}`
-      
+      const objId =
+        objConfig.id ||
+        `${scene.id}-obj-${Math.random().toString(36).substr(2, 9)}`
+
       // Convert array positions to objects
       const position = Array.isArray(objConfig.position)
-        ? { x: objConfig.position[0], y: objConfig.position[1], z: objConfig.position[2] }
+        ? {
+            x: objConfig.position[0],
+            y: objConfig.position[1],
+            z: objConfig.position[2]
+          }
         : objConfig.position
-      
+
       const rotation = Array.isArray(objConfig.rotation)
-        ? { x: objConfig.rotation[0], y: objConfig.rotation[1], z: objConfig.rotation[2] }
+        ? {
+            x: objConfig.rotation[0],
+            y: objConfig.rotation[1],
+            z: objConfig.rotation[2]
+          }
         : objConfig.rotation
 
-      const modelUrl = this.parser?.resolvePath(objConfig.model, this.engine.story.project.assets.basePath) || objConfig.model
+      const modelUrl =
+        this.parser?.resolvePath(
+          objConfig.model,
+          this.engine.story.project.assets.basePath
+        ) || objConfig.model
       if (!modelUrl) {
         console.warn(`  Skipping object ${objId} — no model path set`)
         continue
@@ -384,7 +389,7 @@ export class SceneManager {
         rotation,
         model: modelUrl
       }
-      
+
       await this.characterManager.loadObject(objId, resolvedConfig)
     }
   }
@@ -403,42 +408,67 @@ export class SceneManager {
 
     for (const videoConfig of scene.videos) {
       try {
-        const videoUrl = this.parser?.resolvePath(videoConfig.url, this.engine.story.project.assets.basePath) || videoConfig.url
+        const videoUrl =
+          this.parser?.resolvePath(
+            videoConfig.url,
+            this.engine.story.project.assets.basePath
+          ) || videoConfig.url
         if (!videoUrl) {
           console.warn(`  Skipping video ${videoConfig.id} — no URL set`)
           continue
         }
-        console.log(`  Setting up video ${videoConfig.id}: ${videoUrl}, triggerAt: ${videoConfig.triggerAt}s`)
+        console.log(
+          `  Setting up video ${videoConfig.id}: ${videoUrl}, triggerAt: ${videoConfig.triggerAt}s`
+        )
 
         const resolvedConfig = {
           ...videoConfig,
           url: videoUrl,
           position: videoConfig.position
-            ? (Array.isArray(videoConfig.position)
-              ? { x: videoConfig.position[0], y: videoConfig.position[1], z: videoConfig.position[2] }
-              : videoConfig.position)
+            ? Array.isArray(videoConfig.position)
+              ? {
+                  x: videoConfig.position[0],
+                  y: videoConfig.position[1],
+                  z: videoConfig.position[2]
+                }
+              : videoConfig.position
             : { x: 0, y: 0, z: 0 },
           rotation: videoConfig.rotation
-            ? (Array.isArray(videoConfig.rotation)
-              ? { x: videoConfig.rotation[0], y: videoConfig.rotation[1], z: videoConfig.rotation[2] }
-              : videoConfig.rotation)
+            ? Array.isArray(videoConfig.rotation)
+              ? {
+                  x: videoConfig.rotation[0],
+                  y: videoConfig.rotation[1],
+                  z: videoConfig.rotation[2]
+                }
+              : videoConfig.rotation
             : { x: 0, y: 0, z: 0 },
-          walls: videoConfig.walls?.map(wall => ({
+          walls: videoConfig.walls?.map((wall) => ({
             position: Array.isArray(wall.position)
-              ? { x: wall.position[0], y: wall.position[1], z: wall.position[2] }
+              ? {
+                  x: wall.position[0],
+                  y: wall.position[1],
+                  z: wall.position[2]
+                }
               : wall.position,
             rotation: Array.isArray(wall.rotation)
-              ? { x: wall.rotation[0], y: wall.rotation[1], z: wall.rotation[2] }
+              ? {
+                  x: wall.rotation[0],
+                  y: wall.rotation[1],
+                  z: wall.rotation[2]
+                }
               : wall.rotation
           }))
         }
-        await this.videoProjector.createVideoProjection(videoConfig.id, resolvedConfig)
+        await this.videoProjector.createVideoProjection(
+          videoConfig.id,
+          resolvedConfig
+        )
       } catch (error) {
         console.error(`Failed to load video ${videoConfig.id}:`, error)
         // Continue loading other videos
       }
     }
-    
+
     this.setupVideoTriggers(scene.videos)
   }
 
@@ -447,72 +477,32 @@ export class SceneManager {
    */
   async loadSceneAudio(scene) {
     if (!this.audioManager) return
-
-    // scene.audio is always an array after normalization
-    const audioTracks = Array.isArray(scene.audio) ? scene.audio : (scene.audio ? [scene.audio] : [])
-    if (audioTracks.length === 0) return
-
-    for (let i = 0; i < audioTracks.length; i++) {
-      const audioConf = audioTracks[i]
-      if (!audioConf.url) {
-        console.log(`No audio file set for ${scene.id} track ${i}, skipping`)
-        continue
-      }
-
-      const audioId = audioConf.id || `${scene.id}_audio_${i}`
-      const audioUrl = this.parser?.resolvePath(audioConf.url, this.engine.story.project.assets.basePath) || audioConf.url
-
-      console.log(`Loading audio for ${scene.id} [${audioId}]: ${audioUrl}`)
-
-      // Setup positional audio if configured (use first track with position data)
-      if (audioConf.positional && audioConf.position) {
-        this.positionalAudioPosition = Array.isArray(audioConf.position)
-          ? new THREE.Vector3(audioConf.position[0], audioConf.position[1], audioConf.position[2])
-          : new THREE.Vector3(audioConf.position.x, audioConf.position.y, audioConf.position.z)
-        
-        this.audioWaypoints = audioConf.waypoints?.map(wp => ({
-          time: wp.time,
-          position: Array.isArray(wp.position)
-            ? new THREE.Vector3(wp.position[0], wp.position[1], wp.position[2])
-            : new THREE.Vector3(wp.position.x, wp.position.y, wp.position.z)
-        }))
-        this.audioWaypointIndex = 0
-      }
-
-      // Use the first track for time-update and scene-end callbacks
-      const isFirstTrack = (i === 0)
-
-      await this.audioManager.loadAudio(audioId, {
-        url: audioUrl,
-        volume: audioConf.volume || 0.5,
-        loop: audioConf.loop || false,
-        positional: audioConf.positional || false,
-        position: audioConf.position,
-        refDistance: audioConf.refDistance,
-        maxDistance: audioConf.maxDistance,
-        waypoints: audioConf.waypoints,
-        onTimeUpdate: isFirstTrack ? (time) => this.handleAudioTimeUpdate(scene.id, time) : undefined,
-        onEnded: isFirstTrack ? () => this.handleSceneEnd(scene.id) : undefined,
+    for (const [index, config] of (scene.audio || []).entries()) {
+      if (!config.url) continue
+      const id = config.id || scene.id + '_audio_' + index
+      const sound = await this.audioManager.loadAudio(id, {
+        ...config,
+        url:
+          this.parser?.resolvePath(
+            config.url,
+            this.engine.story.project.assets.basePath
+          ) || config.url,
+        volume: config.volume ?? 0.5
       })
-      
-      // Start playback with optional delay
-      const delay = audioConf.delay || 0
-      if (audioConf.autoplay !== false) {
-        if (delay > 0) {
-          const audioDelayId = setTimeout(() => {
-            this.audioManager.play(audioId)
-            if (isFirstTrack && this.subtitleManager) {
-              this.subtitleManager.onAudioStart(scene.id)
-            }
-          }, delay)
-          this.pendingTimeouts.push(audioDelayId)
-        } else {
-          this.audioManager.play(audioId)
-          if (isFirstTrack && this.subtitleManager) {
-            this.subtitleManager.onAudioStart(scene.id)
-          }
-        }
-      }
+      if (config.positional)
+        (this.engine.roomModel || this.engine.scene)?.add(sound)
+      this.audioSchedule.push({
+        id,
+        config,
+        duration:
+          config.duration > 0
+            ? Math.min(
+                config.duration / 1000,
+                sound.buffer?.duration || Infinity
+              )
+            : sound.buffer?.duration || 0,
+        started: false
+      })
     }
   }
 
@@ -522,10 +512,11 @@ export class SceneManager {
   setupSceneEffects(scene) {
     if (!scene.lighting?.effects || !this.sceneEffects) return
 
-    scene.lighting.effects.forEach(effect => {
+    scene.lighting.effects.forEach((effect) => {
       if (effect.type === 'walkingTour') {
         this.sceneEffects.initWalkingTour({
-          waypoints: effect.waypoints?.map(wp => ({
+          waypoints: effect.waypoints?.map((wp) => ({
+            ...wp,
             time: wp.time,
             position: Array.isArray(wp.position)
               ? { x: wp.position[0], y: wp.position[1], z: wp.position[2] }
@@ -537,10 +528,11 @@ export class SceneManager {
         })
         // Walking tour will be started when audio starts
       }
-      
+
       if (effect.type === 'flicker') {
         this.sceneEffects.initFlicker({
           triggerTime: effect.triggerTime,
+          duration: effect.duration,
           patterns: effect.patterns
         })
         // Store trigger time for audio time update
@@ -556,42 +548,8 @@ export class SceneManager {
    * The actual ending sequence is triggered by the last video ending
    * (when endingTrigger is "lastVideo"), not by character opacity.
    */
-  setupEndingCondition(scene) {
-    const endingConfig = this.engine?.story?.ending
-    if (!endingConfig || !endingConfig.triggerMode) return
-
-    // Only set up for the configured trigger scene
-    if (endingConfig.triggerSceneId && endingConfig.triggerSceneId !== scene.id) return
-
-    if (endingConfig.triggerMode === 'characterFade') {
-      const charId = endingConfig.triggerCharacterId
-      if (!charId) return
-
-      console.log(`Setting up character fade effect for ${charId} in ${scene.id} (visual only, ending triggered by last video)`)
-      this.characterFadeInComplete = false
-
-      // Start periodic check for the character opacity (visual effect only)
-      this.endingCheckInterval = setInterval(() => {
-        if (!scene.isActive) {
-          clearInterval(this.endingCheckInterval)
-          this.endingCheckInterval = null
-          return
-        }
-
-        if (!this.characterManager) return
-
-        const opacity = this.characterManager.getCharacterOpacity(charId)
-        
-        // Check if initial fade-in is complete (opacity near target value of 0.7)
-        if (!this.characterFadeInComplete && opacity >= 0.65) {
-          this.characterFadeInComplete = true
-          console.log(`Character fade effect: ${charId} fade-in complete (opacity: ${opacity.toFixed(2)})`)
-          
-          // Start slow fade out (66 seconds, matching original visual effect)
-          this.characterManager.slowFadeOutCharacter(charId, 66000, 0.7)
-        }
-      }, 1000) // Check every second
-    }
+  setupEndingCondition() {
+    this.endingPlayed = false
   }
 
   /**
@@ -600,10 +558,10 @@ export class SceneManager {
   setupVideoTriggers(videos) {
     this.videoTriggers.clear()
     this.lastVideoId = null
-    
+
     // Find the video with the highest triggerAt (the last video to play)
     let maxTriggerAt = -1
-    
+
     videos.forEach((video) => {
       if (video.triggerAt !== undefined) {
         this.videoTriggers.set(video.id, {
@@ -616,9 +574,11 @@ export class SceneManager {
         }
       }
     })
-    
+
     if (this.lastVideoId) {
-      console.log(`Last video in scene: ${this.lastVideoId} (triggerAt ${maxTriggerAt}s)`)
+      console.log(
+        `Last video in scene: ${this.lastVideoId} (triggerAt ${maxTriggerAt}s)`
+      )
     }
   }
 
@@ -627,7 +587,10 @@ export class SceneManager {
    */
   handleAudioTimeUpdate(sceneId, currentTime) {
     // Log time every 5 seconds for debugging
-    if (Math.floor(currentTime) % 5 === 0 && Math.floor(currentTime) !== this._lastLogTime) {
+    if (
+      Math.floor(currentTime) % 5 === 0 &&
+      Math.floor(currentTime) !== this._lastLogTime
+    ) {
       this._lastLogTime = Math.floor(currentTime)
       console.log(`[${sceneId}] Audio time: ${currentTime.toFixed(1)}s`)
     }
@@ -641,15 +604,12 @@ export class SceneManager {
     this.videoTriggers.forEach((trigger, videoId) => {
       if (!trigger.triggered && currentTime >= trigger.triggerAt) {
         trigger.triggered = true
-        console.log(`[${sceneId}] Triggering video: ${videoId} at ${currentTime.toFixed(1)}s`)
+        console.log(
+          `[${sceneId}] Triggering video: ${videoId} at ${currentTime.toFixed(1)}s`
+        )
         this.triggerVideo(videoId)
       }
     })
-
-    // Update positional audio position based on waypoints
-    if (this.audioWaypoints && this.audioManager) {
-      this.updatePositionalAudio(sceneId, currentTime)
-    }
 
     // Check for flicker effect trigger
     if (this.flickerTriggerTime !== undefined && !this.flickerTriggered) {
@@ -662,7 +622,9 @@ export class SceneManager {
     // Check for walking tour start (starts at first waypoint time)
     const scene = this.scenes.get(sceneId)
     if (scene?.lighting?.effects) {
-      const walkingTour = scene.lighting.effects.find(e => e.type === 'walkingTour')
+      const walkingTour = scene.lighting.effects.find(
+        (e) => e.type === 'walkingTour'
+      )
       if (walkingTour && !this.walkingTourStarted && currentTime >= 1) {
         this.walkingTourStarted = true
         this.sceneEffects?.startWalkingTour()
@@ -674,7 +636,11 @@ export class SceneManager {
    * Update positional audio position based on waypoints
    */
   updatePositionalAudio(sceneId, currentTime) {
-    if (!this.audioWaypoints || this.audioWaypointIndex >= this.audioWaypoints.length) return
+    if (
+      !this.audioWaypoints ||
+      this.audioWaypointIndex >= this.audioWaypoints.length
+    )
+      return
 
     const currentWaypoint = this.audioWaypoints[this.audioWaypointIndex]
     if (currentTime >= currentWaypoint.time) {
@@ -692,43 +658,50 @@ export class SceneManager {
   async triggerVideo(videoId) {
     if (!this.videoProjector) return
 
-    // Fade out currently active videos before playing new one
-    for (const activeId of this.activeVideos) {
-      if (activeId !== videoId) {
-        await this.videoProjector.fadeOutVideo(activeId, 500)
-        this.videoProjector.removeVideo(activeId)
-      }
-    }
-    this.activeVideos.clear()
-
+    // Multiple projections may play together.
     // Play new video with fade in
-    await this.videoProjector.playVideo(videoId, 2000)
+    const originScene = this.currentSceneId
+    const played = await this.videoProjector.playVideo(
+      videoId,
+      this.currentScene?.videos?.find((v) => v.id === videoId)?.fadeIn ?? 1000
+    )
+    if (!played || this.currentSceneId !== originScene) return
+    if (this.paused) this.videoProjector.pause(videoId)
     this.activeVideos.add(videoId)
 
     // Listen for video end to automatically fade out and remove
     // This matches the original project's behavior where videos fade out on 'ended'
     const videoData = this.videoProjector.videos.get(videoId)
     if (videoData && videoData.element) {
-      videoData.element.addEventListener('ended', () => {
-        console.log(`Video ${videoId} ended, fading out`)
-        this.videoProjector.fadeOutVideo(videoId, 500).then(() => {
-          this.videoProjector.removeVideo(videoId)
-          this.activeVideos.delete(videoId)
-          console.log(`Video ${videoId} removed after fade out`)
-        })
-        
-        // Check if this is the last video in the final scene and endingTrigger is "lastVideo"
-        const endingConfig = this.engine?.story?.ending
-        if (endingConfig?.endingTrigger === 'lastVideo' && 
+      videoData.element.addEventListener(
+        'ended',
+        () => {
+          console.log(`Video ${videoId} ended, fading out`)
+          this.videoProjector.fadeOutVideo(videoId, 500).then(() => {
+            this.videoProjector.removeVideo(videoId)
+            this.activeVideos.delete(videoId)
+            console.log(`Video ${videoId} removed after fade out`)
+          })
+
+          // Check if this is the last video in the final scene and endingTrigger is "lastVideo"
+          const endingConfig = this.engine?.story?.ending
+          if (
+            endingConfig?.endingTrigger === 'lastVideo' &&
             videoId === this.lastVideoId &&
-            endingConfig.triggerSceneId === this.currentSceneId) {
-          console.log(`Last video ${videoId} ended in final scene - triggering ending sequence (3s delay)`)
-          const endingTimeout = setTimeout(() => {
-            this.engine.handleComplete()
-          }, 3000)
-          this.pendingTimeouts.push(endingTimeout)
-        }
-      }, { once: true })
+            (endingConfig.triggerSceneId || this.getAllScenes().at(-1)?.id) ===
+              this.currentSceneId
+          ) {
+            console.log(
+              `Last video ${videoId} ended in final scene - triggering ending sequence (3s delay)`
+            )
+            const endingTimeout = setTimeout(() => {
+              this.engine.handleComplete()
+            }, 3000)
+            this.pendingTimeouts.push(endingTimeout)
+          }
+        },
+        { once: true }
+      )
     }
   }
 
@@ -739,33 +712,23 @@ export class SceneManager {
    */
   startGuidedCamera(sceneId) {
     const controller = this.engine?.guidedCameraController
-    if (!controller) return
-
-    // Check if this scene has any keyframes
-    const positions = controller.sceneCameraPositions[sceneId]
-    if (!positions || positions.length === 0) return
-
-    // Build a getAudioTime callback — prefer the first audio track for this scene;
-    // fall back to a wall-clock timer so keyframes work even without audio.
-    const firstAudioId = this._getFirstAudioIdForScene(sceneId)
-    let getTime
-
-    if (firstAudioId && this.audioManager) {
-      getTime = () => this.audioManager.getCurrentTime(firstAudioId)
-    } else {
-      // No audio — use a wall-clock timer starting now
-      const start = performance.now()
-      getTime = () => (performance.now() - start) / 1000
+    if (
+      this.engine?.guidedEnabled !== false &&
+      controller?.sceneCameraPositions[sceneId]?.length
+    ) {
+      controller.startSceneTracking(sceneId, () => this.elapsed || 0)
     }
-
-    controller.startSceneTracking(sceneId, getTime)
-    console.log(`Guided camera tracking started for ${sceneId} (${positions.length} keyframes)`)
   }
 
   /**
    * Stop guided camera animation
    */
   stopGuidedCamera() {
+    if (this.engine?.cameraControls) {
+      this.engine.cameraControls.enabled = true
+      if (this.engine.cameraControls.recenterButton && !this.engine.playbackBar)
+        this.engine.cameraControls.recenterButton.style.display = 'flex'
+    }
     const controller = this.engine?.guidedCameraController
     if (controller) {
       controller.stopSceneTracking()
@@ -778,7 +741,11 @@ export class SceneManager {
   _getFirstAudioIdForScene(sceneId) {
     const scene = this.scenes.get(sceneId)
     if (!scene) return null
-    const audioTracks = Array.isArray(scene.audio) ? scene.audio : (scene.audio ? [scene.audio] : [])
+    const audioTracks = Array.isArray(scene.audio)
+      ? scene.audio
+      : scene.audio
+        ? [scene.audio]
+        : []
     if (audioTracks.length === 0) return null
     return audioTracks[0].id || `${sceneId}_audio_0`
   }
@@ -789,87 +756,39 @@ export class SceneManager {
   async deactivateScene(sceneId) {
     const scene = this.scenes.get(sceneId)
     if (!scene) return
-
-    // Stop audio
-    if (this.audioManager) {
-      const audioId = `${sceneId}_audio`
-      await this.audioManager.fadeOut(audioId, 500)
-      this.audioManager.removeAudio(audioId)
-    }
-
-    // Fade out and remove videos
-    if (this.videoProjector && scene.videos) {
-      for (const video of scene.videos) {
-        await this.videoProjector.fadeOutVideo(video.id, 500)
-        this.videoProjector.removeVideo(video.id)
-      }
-    }
-
-    // Fade out characters before removing (matching original behavior)
-    if (this.characterManager) {
-      const charIds = this.characterManager.sceneCharacterMap.get(sceneId)
-      if (charIds && charIds.size > 0) {
-        // Fade out all characters in this scene
-        const fadePromises = []
-        charIds.forEach(charId => {
-          fadePromises.push(new Promise(resolve => {
-            this.characterManager.fadeOutCharacter(charId, 1000)
-            setTimeout(resolve, 1000) // Wait for fade to complete
-          }))
-        })
-        await Promise.all(fadePromises)
-      }
-      this.characterManager.removeSceneCharacters(sceneId)
-    }
-
-    // Remove volumetric lighting
-    if (this.volumetricLighting) {
-      this.volumetricLighting.fadeOut(sceneId, 500)
-    }
-
-    // Remove dynamic scene lights
-    this.removeDynamicLights()
-
-    // Stop guided camera tracking
-    this.stopGuidedCamera()
-
-    // Stop scene effects
-    if (this.sceneEffects) {
-      this.sceneEffects.stopWalkingTour()
-      this.sceneEffects.stopFlicker()
-    }
-
-    // Clear ending check interval
-    if (this.endingCheckInterval) {
-      clearInterval(this.endingCheckInterval)
-      this.endingCheckInterval = null
-    }
-    this.characterFadeInComplete = false
-
-    // Clear all pending delayed timeouts (prevents characters loading into wrong scenes)
-    this.pendingTimeouts.forEach(id => clearTimeout(id))
+    scene.isActive = false
+    this.pendingTimeouts.forEach(clearTimeout)
     this.pendingTimeouts = []
-
-    // Clear state
+    for (const item of this.audioSchedule || [])
+      this.audioManager?.removeAudio(item.id)
+    for (const video of scene.videos || [])
+      this.videoProjector?.removeVideo(video.id)
+    this.characterManager?.removeSceneCharacters(sceneId)
+    this.volumetricLighting?.fadeOut(sceneId, 500)
+    this.removeDynamicLights()
+    this.stopGuidedCamera()
+    this.sceneEffects?.stopWalkingTour()
+    this.sceneEffects?.stopFlicker()
+    this.subtitleManager?.onAudioEnd()
     this.videoTriggers.clear()
     this.activeVideos.clear()
-    this.positionalAudioPosition = null
-    this.audioWaypoints = null
-    this.audioWaypointIndex = 0
+    this.audioSchedule = []
+    this.characterSchedule = []
     this.flickerTriggerTime = undefined
     this.flickerTriggered = false
     this.walkingTourStarted = false
-
-    scene.isActive = false
   }
 
   /**
    * Handle scene end (audio finished)
    */
   handleSceneEnd(sceneId) {
+    if (this.sceneEnded || sceneId !== this.currentSceneId) return
+    this.sceneEnded = true
+    this.pause()
     const scene = this.scenes.get(sceneId)
     console.log(`Scene ended: ${sceneId}, nextScene: ${scene?.nextScene}`)
-    
+
     // Notify subtitle manager
     if (this.subtitleManager) {
       this.subtitleManager.onAudioEnd()
@@ -877,11 +796,13 @@ export class SceneManager {
 
     // Restore original lighting when audio ends (matching original behavior)
     // EXCEPT for scenes with walking tour (scene3) - those handle their own lighting
-    const hasWalkingTour = scene?.lighting?.effects?.some(e => e.type === 'walkingTour')
+    const hasWalkingTour = scene?.lighting?.effects?.some(
+      (e) => e.type === 'walkingTour'
+    )
     if (!hasWalkingTour && this.lightingManager) {
       this.lightingManager.restoreOriginalLighting()
     }
-    
+
     if (this.onSceneEnd) {
       this.onSceneEnd(scene)
     }
@@ -906,8 +827,8 @@ export class SceneManager {
    */
   async nextScene() {
     const scenes = this.getAllScenes()
-    const currentIndex = scenes.findIndex(s => s.id === this.currentSceneId)
-    
+    const currentIndex = scenes.findIndex((s) => s.id === this.currentSceneId)
+
     if (currentIndex < scenes.length - 1) {
       await this.changeScene(scenes[currentIndex + 1].id)
     }
@@ -915,50 +836,170 @@ export class SceneManager {
 
   async previousScene() {
     const scenes = this.getAllScenes()
-    const currentIndex = scenes.findIndex(s => s.id === this.currentSceneId)
-    
+    const currentIndex = scenes.findIndex((s) => s.id === this.currentSceneId)
+
     if (currentIndex > 0) {
       await this.changeScene(scenes[currentIndex - 1].id)
     }
   }
 
   skipCurrentScene() {
-    if (this.audioManager && this.currentSceneId) {
-      const audioId = `${this.currentSceneId}_audio`
-      this.audioManager.stop(audioId)
-      this.handleSceneEnd(this.currentSceneId)
-    }
+    for (const item of this.audioSchedule || [])
+      this.audioManager?.stop(item.id)
+    this.handleSceneEnd(this.currentSceneId)
   }
 
   pause() {
-    if (this.audioManager && this.currentSceneId) {
-      const audioId = `${this.currentSceneId}_audio`
-      this.audioManager.pause(audioId)
-    }
-
-    this.activeVideos.forEach((videoId) => {
-      this.videoProjector?.pause(videoId)
-    })
+    this.paused = true
+    for (const item of this.audioSchedule || [])
+      if (item.started) this.audioManager?.pause(item.id)
+    this.activeVideos.forEach((id) => this.videoProjector?.pause(id))
   }
 
   resume() {
-    if (this.audioManager && this.currentSceneId) {
-      const audioId = `${this.currentSceneId}_audio`
-      this.audioManager.play(audioId)
+    this.paused = false
+    for (const item of this.audioSchedule || []) {
+      if (
+        item.started &&
+        !item.stopped &&
+        (item.config.loop ||
+          this.elapsed < (item.config.delay || 0) / 1000 + item.duration)
+      )
+        this.audioManager?.play(item.id)
     }
-
-    this.activeVideos.forEach((videoId) => {
-      this.videoProjector?.play(videoId)
-    })
+    this.activeVideos.forEach((id) => this.videoProjector?.play(id))
   }
 
   /**
    * Update (called each frame)
    */
   update(delta) {
-    if (this.characterManager) {
-      this.characterManager.update(delta)
+    if (this.paused || this.isTransitioning || !this.currentScene?.isActive)
+      return
+    this.elapsed = (this.elapsed || 0) + Math.max(0, delta)
+    const time = this.elapsed
+    this.characterManager?.update(delta)
+    for (const item of this.audioSchedule || []) {
+      if (
+        !item.started &&
+        item.config.autoplay !== false &&
+        time >= (item.config.delay || 0) / 1000
+      ) {
+        item.started = true
+        this.audioManager.play(item.id)
+      }
     }
+    for (const item of this.audioSchedule || []) {
+      if (
+        item.started &&
+        !item.stopped &&
+        item.config.duration > 0 &&
+        time >= (item.config.delay || 0) / 1000 + item.config.duration / 1000
+      ) {
+        this.audioManager.stop(item.id)
+        item.stopped = true
+      }
+    }
+    for (const { config, model } of this.characterSchedule || []) {
+      const t = time * 1000 - (config.delay || 0)
+      const fadeIn = config.fadeIn ?? config.fadeInDuration ?? 1000
+      const fadeOut = config.fadeOut ?? config.fadeOutDuration ?? 1000
+      const duration = config.duration > 0 ? config.duration : Infinity
+      const factor =
+        t < 0
+          ? 0
+          : Math.min(
+              fadeIn > 0 ? t / fadeIn : 1,
+              t < duration - fadeOut
+                ? 1
+                : fadeOut > 0
+                  ? (duration - t) / fadeOut
+                  : t < duration
+                    ? 1
+                    : 0
+            )
+      const opacity = Math.max(0, factor) * (config.opacity ?? 0.7)
+      model.visible = opacity > 0
+      model.traverse((child) => {
+        if (!child.isMesh || !child.material) return
+        for (const material of Array.isArray(child.material)
+          ? child.material
+          : [child.material])
+          material.opacity = opacity
+      })
+      const ending = this.engine?.story?.ending
+      if (
+        !this.endingPlayed &&
+        ending?.triggerMode === 'characterFade' &&
+        ending.triggerCharacterId === config.id &&
+        time >= characterEndingTime(config,ending) &&
+        (!ending.triggerSceneId ||
+          ending.triggerSceneId === this.currentSceneId)
+      ) {
+        this.endingPlayed = true
+        this.engine.handleComplete()
+      }
+    }
+    this.handleAudioTimeUpdate(this.currentSceneId, time)
+    for (const video of this.currentScene.videos || []) {
+      if (
+        video.duration > 0 &&
+        time >= (video.triggerAt || 0) + video.duration &&
+        this.activeVideos.has(video.id)
+      ) {
+        this.videoProjector.removeVideo(video.id)
+        this.activeVideos.delete(video.id)
+      }
+    }
+    const scene = this.currentScene
+    const audioEnd = Math.max(
+      0,
+      ...(this.audioSchedule || [])
+        .filter((a) => a.config.autoplay !== false && !a.config.loop)
+        .map((a) => (a.config.delay || 0) / 1000 + a.duration)
+    )
+    const captions = Array.isArray(scene.subtitles)
+      ? scene.subtitles
+      : Object.values(scene.subtitles || {}).flat()
+    const videoEnd = Math.max(
+      0,
+      ...(scene.videos || [])
+        .filter((v) => !v.loop)
+        .map(
+          (v) =>
+            (v.triggerAt || 0) +
+            (v.duration ||
+              this.videoProjector?.videos.get(v.id)?.element?.duration ||
+              0)
+        )
+    )
+    const characterEnd = Math.max(
+      0,
+      ...(scene.characters || [])
+        .filter((c) => c.duration > 0)
+        .map((c) => ((c.delay || 0) + c.duration) / 1000)
+    )
+    const cameraEnd = Math.max(
+      0,
+      ...(this.engine?.story?.camera?.guided?.[scene.id] || []).map(
+        (k) => k.time + (k.duration || 0) / 1000
+      )
+    )
+    const end =
+      scene.duration > 0
+        ? scene.duration
+        : Math.max(
+            audioEnd,
+            videoEnd,
+            characterEnd,
+            cameraEnd,
+            ...captions.map((c) => c.end || 0),
+            10
+          )
+    const ending=this.engine?.story?.ending
+    const endingCharacter=ending?.triggerMode==='characterFade'&&(!ending.triggerSceneId||ending.triggerSceneId===scene.id)?scene.characters?.find(c=>c.id===ending.triggerCharacterId):null
+    const triggerEnd=endingCharacter?characterEndingTime(endingCharacter,ending):0
+    if (time >= Math.max(end,Number.isFinite(triggerEnd)?triggerEnd:0)) this.handleSceneEnd(scene.id)
   }
 
   /**
@@ -968,7 +1009,7 @@ export class SceneManager {
     if (this.currentSceneId) {
       this.deactivateScene(this.currentSceneId)
     }
-    
+
     this.scenes.clear()
     this.videoTriggers.clear()
     this.activeVideos.clear()

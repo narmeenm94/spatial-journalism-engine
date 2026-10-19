@@ -9,7 +9,7 @@ export class AssetLoader {
     this.gltfLoader = null
     this.audioLoader = null
     this.textureLoader = null
-    
+
     this.onProgress = null
     this.totalAssets = 0
     this.loadedAssets = 0
@@ -103,7 +103,7 @@ export class AssetLoader {
     }
 
     this.loadingPromises.set(url, loadPromise)
-    
+
     try {
       const asset = await loadPromise
       this.cache.set(url, asset)
@@ -237,6 +237,21 @@ export class AssetLoader {
    * @returns {string} Lowercase extension
    */
   getExtension(url) {
+    if (url.startsWith('data:')) {
+      const mime = url.slice(5, url.indexOf(';'))
+      return (
+        {
+          'model/gltf-binary': 'glb',
+          'model/gltf+json': 'gltf',
+          'audio/mpeg': 'mp3',
+          'audio/wav': 'wav',
+          'video/mp4': 'mp4',
+          'video/webm': 'webm',
+          'image/png': 'png',
+          'image/jpeg': 'jpg'
+        }[mime] || ''
+      )
+    }
     const path = url.split('?')[0]
     const parts = path.split('.')
     return parts[parts.length - 1].toLowerCase()
@@ -295,7 +310,7 @@ export class AssetLoader {
         if (child.geometry) child.geometry.dispose()
         if (child.material) {
           if (Array.isArray(child.material)) {
-            child.material.forEach(m => m.dispose())
+            child.material.forEach((m) => m.dispose())
           } else {
             child.material.dispose()
           }

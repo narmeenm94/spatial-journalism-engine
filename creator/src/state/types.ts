@@ -1,3 +1,6 @@
+import type { CaptionStyle } from '../../../engine/src/ui/captionStyle.js'
+import type { StoryFont } from '../../../engine/src/ui/storyFonts'
+import type { ScreenDesign } from '../../../engine/src/ui/screenDesign.js'
 /**
  * Core types for the Spatial Journalism Engine Creator
  * Mirrors the story.json schema structure
@@ -17,6 +20,16 @@ export interface ProjectConfig {
   languages: string[]
   defaultLanguage: string
   modes: string[]
+  ar?: {
+    backend?: 'auto' | 'webxr' | '8thwall'
+    tracking?: 'world' | 'image'
+    imageTargets?: Array<{
+      imagePath: string
+      type: string
+      properties: Record<string, unknown>
+      [key: string]: unknown
+    }>
+  }
   assets: {
     basePath: string
     environment: string
@@ -56,6 +69,11 @@ export interface CameraConfig {
   buffer: number
   recenterPosition: [number, number, number]
   recenterRotation: [number, number, number]
+  navigation?: 'standard' | 'immersive'
+  chooseMode?: boolean
+  guidedTracking?: 'orientation' | 'world'
+  rotationEnabled?: boolean
+  defaultMode?: 'guided' | 'explore'
   guided?: Record<string, CameraKeyframe[]>
 }
 
@@ -89,10 +107,10 @@ export interface CharacterConfig {
   scale: [number, number, number]
   animation: string | null
   opacity: number
-  delay: number       // ms — when the character begins to fade in
-  duration: number    // ms — total visible time (from delay to fade-out end); 0 = until scene ends
-  fadeIn: number      // ms — fade-in transition length
-  fadeOut: number     // ms — fade-out transition length
+  delay: number // ms — when the character begins to fade in
+  duration: number // ms — total visible time (from delay to fade-out end); 0 = until scene ends
+  fadeIn: number // ms — fade-in transition length
+  fadeOut: number // ms — fade-out transition length
 }
 
 // ── Video ──
@@ -102,8 +120,8 @@ export interface VideoConfig {
   position: [number, number, number]
   rotation: [number, number, number]
   size: [number, number]
-  triggerTime: number    // seconds — when the video starts
-  duration: number       // seconds — playback duration; 0 = play to end
+  triggerTime: number // seconds — when the video starts
+  duration: number // seconds — playback duration; 0 = play to end
   opacity?: number
   loop?: boolean
   muted?: boolean
@@ -123,9 +141,10 @@ export interface AudioConfig {
   volume: number
   loop: boolean
   autoplay?: boolean
-  delay?: number         // ms — when the audio starts playing
-  duration?: number      // ms — playback duration; 0 = play to end
+  delay?: number // ms — when the audio starts playing
+  duration?: number // ms — playback duration; 0 = play to end
   position?: [number, number, number]
+  rolloffFactor?: number
   refDistance?: number
   maxDistance?: number
   waypoints?: Array<{
@@ -136,6 +155,7 @@ export interface AudioConfig {
 
 // ── Interactive Object ──
 export interface InteractiveObjectConfig {
+  unlit?: boolean
   id: string
   name: Record<string, string>
   model: string
@@ -157,6 +177,7 @@ export interface InteractiveObjectConfig {
 // ── Lighting Effects ──
 export interface SpotlightConfig {
   id: string
+  distance?: number
   position: [number, number, number]
   target: [number, number, number]
   color: string
@@ -214,9 +235,12 @@ export interface ParticleConfig {
   opacity: number
   blending: string
   area: {
-    minX: number; maxX: number
-    minY: number; maxY: number
-    minZ: number; maxZ: number
+    minX: number
+    maxX: number
+    minY: number
+    maxY: number
+    minZ: number
+    maxZ: number
   }
   animation: {
     rotateY: number
@@ -235,8 +259,29 @@ export interface RenderingConfig {
   }
 }
 
+export interface SceneButtonConfig {
+  id: string
+  label: Record<string, string>
+  appearance: 'text' | 'sprite' | 'model'
+  image?: Record<string, string>
+  model?: string
+  position: [number, number, number]
+  rotation: [number, number, number]
+  scale: [number, number, number]
+  targetScene?: string
+  showWhen: 'start' | 'time' | 'chapterEnd'
+  showAt?: number
+  glow?: boolean
+  pulse?: boolean
+  depthTest?: boolean
+  color?: string
+  backgroundColor?: string
+}
+
 // ── Scene ──
 export interface SceneConfig {
+  sceneButtons?: SceneButtonConfig[]
+  duration?: number
   id: string
   title: Record<string, string>
   audio: AudioConfig[]
@@ -252,6 +297,11 @@ export interface SceneConfig {
 
 // ── Ending ──
 export interface EndingConfig {
+  presentation?: 'readable' | 'cinematic'
+  returnToTitle?: boolean
+  triggerOpacity?: number
+  triggerDelay?: number
+  cinematic?: import('../../../engine/src/ui/cinematicEnding.js').CinematicSettings
   video: string
   text: Record<string, string>
   quotes: Array<Record<string, string>>
@@ -267,6 +317,8 @@ export interface EndingConfig {
 
 // ── UI Branding ──
 export interface UIConfig {
+  captions?: CaptionStyle
+  screenDesigner?: ScreenDesign
   homeScreen: {
     title: Record<string, string>
     subtitle: Record<string, string>
@@ -278,12 +330,15 @@ export interface UIConfig {
     logo: string
     primaryColor: string
     font: string
+    fonts?: StoryFont[]
     fontFiles: {
       woff2: string
       woff: string
     }
   }
   controls: {
+    recenterPlacement?: 'menu' | 'overlay'
+    recenterIcon?: string
     exploration: Record<string, string>
     guided: Record<string, string>
   }
@@ -295,6 +350,8 @@ export interface UIConfig {
 
 // ── Full Story ──
 export interface StoryConfig {
+  formatVersion?: string
+  embeddedAssets?: Record<string, string>
   project: ProjectConfig
   environment: EnvironmentConfig
   camera: CameraConfig
@@ -305,13 +362,16 @@ export interface StoryConfig {
   ending: EndingConfig
   ui: UIConfig
   interactableObjects?: InteractiveObjectConfig[]
+  ambience?: Array<AudioConfig & { objectId?: string }>
 }
 
 // ── Editor State ──
 export type SelectionType =
+  | 'sceneButton'
   | 'none'
   | 'environment'
   | 'camera'
+  | 'staticObject'
   | 'character'
   | 'video'
   | 'light'
@@ -340,6 +400,10 @@ export interface EditorState {
   transformMode: TransformMode
   timelinePosition: number
   isPlaying: boolean
+  playbackPreview: boolean
+  mediaDurations: Record<string, number>
+  playbackLoading: Record<string, string>
+  playbackIssues: Record<string, string>
   language: string
 
   // UI state
@@ -349,7 +413,10 @@ export interface EditorState {
   showGrid: boolean
   showAxes: boolean
   showBounds: boolean
+  audienceFullView: boolean
+  showCameraPiP: boolean
   showCameraPath: boolean
+  previewCameraPath: boolean
 
   // Asset management
   assetFiles: Record<string, File>

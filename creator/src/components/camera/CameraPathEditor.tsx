@@ -1,142 +1,297 @@
-/**
- * Camera Path Editor - Edit guided camera keyframes for the active scene
- * Shown as a tab in the bottom panel alongside the timeline
- */
+import { ToolTemplates } from '../ToolTemplates'
+import { useEffect, useState } from 'react'
 import { useStore } from '../../state/store'
+import { chapterDuration } from '../../utils/playback'
 import { Vec3Input } from '../panels/Vec3Input'
 import type { CameraKeyframe } from '../../state/types'
 
 export function CameraPathEditor() {
-  const story = useStore((s) => s.story)
-  const activeSceneId = useStore((s) => s.activeSceneId)
-  const addCameraKeyframe = useStore((s) => s.addCameraKeyframe)
-  const removeCameraKeyframe = useStore((s) => s.removeCameraKeyframe)
-  const updateCameraKeyframe = useStore((s) => s.updateCameraKeyframe)
-  const selection = useStore((s) => s.selection)
-  const setSelection = useStore((s) => s.setSelection)
-
-  if (!activeSceneId) {
-    return <div style={{ padding: 12, color: 'var(--text-muted)' }}>Select a scene first</div>
+  const story = useStore((s) => s.story),
+    sceneId = useStore((s) => s.activeSceneId),
+    selection = useStore((s) => s.selection)
+  const time = useStore((s) => s.timelinePosition)
+  const playing = useStore(s => s.isPlaying), setPlaying = useStore(s => s.setIsPlaying)
+  const durations = useStore(s => s.mediaDurations)
+  const [captureTime, setCaptureTime] = useState(0)
+  const stops = [...(story.camera.guided?.[sceneId || ''] || [])].sort(
+    (a, b) => a.time - b.time
+  )
+  const selected = stops.find(
+    (k) => selection.type === 'cameraKeyframe' && k.id === selection.itemId
+  )
+  const end = chapterDuration(story.scenes.find(s => s.id === sceneId), stops, durations)
+  useEffect(() => {
+    useStore.setState({
+      showCameraPiP: true,
+      showCameraPath: true,
+      previewCameraPath: true
+    })
+    return () => {
+      useStore.setState({ previewCameraPath: false })
+    }
+  }, [])
+  useEffect(() => {
+    const existing =
+      useStore.getState().story.camera.guided?.[sceneId || ''] || []
+    setCaptureTime(
+      existing.length ? Math.max(...existing.map((k) => k.time)) + 10 : 0
+    )
+  }, [sceneId])
+  if (!sceneId) return <p>Select a chapter to build its camera tour.</p>
+  const capture = (replace = false) => {
+    setPlaying(false)
+    const at = replace && selected ? selected.time : captureTime
+    window.dispatchEvent(
+      new CustomEvent('sj-capture-camera', {
+        detail: { sceneId, time: at, kfId: replace ? selected?.id : undefined }
+      })
+    )
+    if (!replace) setCaptureTime(at + 10)
   }
-
-  const keyframes = story.camera.guided?.[activeSceneId] || []
-
+  const choose = (kf: CameraKeyframe) => {
+    setPlaying(false)
+    useStore
+      .getState()
+      .setSelection({ type: 'cameraKeyframe', sceneId, itemId: kf.id })
+    useStore
+      .getState()
+      .setTimelinePosition(kf.time + (kf.duration ?? 2000) / 1000)
+  }
+  const duplicate = stops.some((k) => k.time === captureTime)
   return (
-    <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
-      {/* Keyframe list */}
-      <div
-        style={{
-          width: 220,
-          borderRight: '1px solid var(--border-color)',
-          overflow: 'auto',
-          padding: 8,
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-          <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600 }}>
-            KEYFRAMES ({keyframes.length})
-          </span>
-          <button className="btn btn-sm" onClick={() => addCameraKeyframe(activeSceneId)}>
-            + Add
-          </button>
+    <div className="camera-path-editor">
+      <ToolTemplates tool="camera"/>
+      <div className="camera-path-intro">
+        <div>
+          <strong>Build a guided camera tour</strong>
+          <p>
+            Frame a view → capture it → play your tour.
+          </p>
         </div>
-
-        {keyframes.map((kf, i) => (
-          <div
-            key={kf.id}
-            className={`tree-item ${selection.type === 'cameraKeyframe' && selection.itemId === kf.id ? 'selected' : ''}`}
-            onClick={() =>
-              setSelection({ type: 'cameraKeyframe', sceneId: activeSceneId, itemId: kf.id })
+      </div>
+      <details className="camera-options-disclosure"><summary>Reader navigation & phone tracking</summary>
+        <label>
+          Reader starts in
+          <select
+            className="form-select"
+            aria-label="Default camera mode"
+            value={story.camera.defaultMode || 'guided'}
+            onChange={(e) =>
+              useStore.getState().updateStory((d) => {
+                d.camera.defaultMode = e.target.value as 'guided' | 'explore'
+              }, 'Change camera mode')
             }
           >
-            <span className="icon">📷</span>
-            <span className="label">
-              KF {i + 1} — t={kf.time}s
-            </span>
-            <button
-              className="btn-icon btn-sm"
-              onClick={(e) => {
-                e.stopPropagation()
-                removeCameraKeyframe(activeSceneId, kf.id)
-              }}
-            >
-              ×
-            </button>
-          </div>
-        ))}
-
-        {keyframes.length === 0 && (
-          <div style={{ color: 'var(--text-muted)', fontSize: 11, textAlign: 'center', padding: 12 }}>
-            No keyframes yet. Add one to define a guided camera path.
-          </div>
-        )}
+            <option value="guided">Guided tour</option>
+            <option value="explore">Free exploration</option>
+          </select>
+        </label>
+      <div className="camera-path-actions">
+        <label>Experience layout<select className="form-select" aria-label="Experience layout" value={story.camera.navigation || 'standard'} onChange={e => useStore.getState().updateStory(d => { d.camera.navigation = e.target.value as 'standard' | 'immersive'; if (e.target.value === 'immersive') { d.camera.chooseMode = true; d.project.ar = {...d.project.ar, tracking:'world', backend:'8thwall'} } }, 'Change experience layout')}>
+          <option value="standard">Place a model in the world</option><option value="immersive">Move inside a full-size space</option>
+        </select></label>
+        <label><input type="checkbox" checked={story.camera.chooseMode || story.camera.navigation === 'immersive'} disabled={story.camera.navigation === 'immersive'} onChange={e => useStore.getState().updateStory(d => { d.camera.chooseMode = e.target.checked }, 'Reader mode choice')} /> Let readers choose Guided or Explore</label>
+        {story.camera.navigation === 'immersive' && <label>Guided phone tracking<select className="form-select" aria-label="Guided phone tracking" value={story.camera.guidedTracking || 'orientation'} onChange={e => useStore.getState().updateStory(d => { d.camera.guidedTracking = e.target.value as 'orientation' | 'world' }, 'Change guided tracking')}>
+          <option value="orientation">Look around + touch movement</option><option value="world">Physical movement + touch (SLAM)</option>
+        </select></label>}
       </div>
-
-      {/* Selected keyframe editor */}
-      <div style={{ flex: 1, overflow: 'auto', padding: 12 }}>
-        {selection.type === 'cameraKeyframe' && selection.itemId ? (
-          <KeyframeEditor sceneId={activeSceneId} kfId={selection.itemId} />
-        ) : (
-          <div style={{ color: 'var(--text-muted)', textAlign: 'center', paddingTop: 20 }}>
-            Select a keyframe to edit
-          </div>
-        )}
+      </details>
+      <div className="camera-path-actions">
+        <label>
+          Start at (seconds)
+          <input
+            aria-label="New camera stop time"
+            className="form-input"
+            type="number"
+            min="0"
+            step="0.5"
+            value={captureTime}
+            onChange={(e) =>
+              setCaptureTime(Math.max(0, Number(e.target.value)))
+            }
+          />
+        </label>
+        <button
+          className="btn btn-primary"
+          disabled={duplicate}
+          onClick={() => capture()}
+        >
+          Capture current view
+        </button>
+        <button
+          className="btn"
+          disabled={!stops.length}
+          onClick={() => {
+            if (time >= end) useStore.getState().setTimelinePosition(0)
+            setPlaying(!playing)
+          }}
+        >
+          {playing ? 'Pause timeline' : 'Play camera path'}
+        </button>
+        <button
+          className="btn"
+          onClick={() => {
+            setPlaying(false)
+            useStore.getState().setTimelinePosition(0)
+          }}
+        >
+          Rewind
+        </button>
+        <label className="camera-path-scrub">
+          Preview · {time.toFixed(1)}s
+          <input
+            aria-label="Camera preview time"
+            type="range"
+            min="0"
+            max={end}
+            step="0.1"
+            value={Math.min(time, end)}
+            onChange={(e) => {
+              setPlaying(false)
+              useStore.getState().setTimelinePosition(Number(e.target.value))
+            }}
+          />
+        </label>
+      </div>
+      {duplicate && (
+        <p role="status">
+          A stop already starts here. Choose another time, or select it and
+          replace its view.
+        </p>
+      )}
+      <div className="camera-path-body">
+        <div className="camera-stop-list">
+          <strong>{stops.length} camera stops</strong>
+          {stops.map((kf, i) => (
+            <div
+              key={kf.id}
+              className={
+                'camera-stop ' + (selected?.id === kf.id ? 'selected' : '')
+              }
+            >
+              <button onClick={() => choose(kf)}>
+                {i + 1}. View at {kf.time}s
+              </button>
+              <button
+                aria-label={'Remove camera stop ' + (i + 1)}
+                onClick={() =>
+                  useStore.getState().removeCameraKeyframe(sceneId, kf.id)
+                }
+              >
+                ×
+              </button>
+            </div>
+          ))}
+          {!stops.length && (
+            <p>
+              Capture your first view at 0 seconds. Move around the canvas and
+              capture a second view at a later time.
+            </p>
+          )}
+        </div>
+        <div className="camera-stop-details">
+          {selected ? (
+            <>
+              <div className="camera-path-actions">
+                <button
+                  className="btn"
+                  onClick={() =>
+                    window.dispatchEvent(
+                      new CustomEvent('sj-view-camera', { detail: selected })
+                    )
+                  }
+                >
+                  Edit from this view
+                </button>
+                <button className="btn" onClick={() => capture(true)}>
+                  Replace with current view
+                </button>
+              </div>
+              <KeyframeEditor sceneId={sceneId} kf={selected} />
+            </>
+          ) : (
+            <p>
+              Select a stop to adjust its timing and view. Play runs the camera, sound and video together in the canvas.
+            </p>
+          )}
+        </div>
       </div>
     </div>
   )
 }
-
-function KeyframeEditor({ sceneId, kfId }: { sceneId: string; kfId: string }) {
-  const story = useStore((s) => s.story)
-  const updateCameraKeyframe = useStore((s) => s.updateCameraKeyframe)
-
-  const kf = story.camera.guided?.[sceneId]?.find((k) => k.id === kfId)
-  if (!kf) return <div>Keyframe not found</div>
-
-  const update = (updates: Partial<CameraKeyframe>) => updateCameraKeyframe(sceneId, kfId, updates)
-
+function KeyframeEditor({
+  sceneId,
+  kf
+}: {
+  sceneId: string
+  kf: CameraKeyframe
+}) {
+  const update = (updates: Partial<CameraKeyframe>) =>
+    useStore.getState().updateCameraKeyframe(sceneId, kf.id, updates)
   return (
     <>
-      <h4 style={{ color: 'var(--accent)', marginBottom: 8 }}>Camera Keyframe</h4>
-
-      <div className="form-group">
-        <label className="form-label">Time (seconds)</label>
-        <input
-          className="form-input"
-          type="number"
-          step={0.5}
-          value={kf.time}
-          onChange={(e) => update({ time: parseFloat(e.target.value) || 0 })}
-        />
-      </div>
-
-      <Vec3Input label="Position" value={kf.position} onChange={(v) => update({ position: v })} />
-      <Vec3Input label="Rotation" value={kf.rotation} onChange={(v) => update({ rotation: v })} step={0.1} />
-
-      <div className="form-row" style={{ marginTop: 8 }}>
-        <div className="form-group">
-          <label className="form-label">Transition Duration (ms)</label>
+      <div className="camera-path-actions">
+        <label>
+          Start at (seconds)
           <input
+            aria-label="Camera stop start time"
             className="form-input"
             type="number"
-            step={100}
-            value={kf.duration}
-            onChange={(e) => update({ duration: parseInt(e.target.value) || 2000 })}
+            min="0"
+            step="0.5"
+            value={kf.time}
+            onChange={(e) =>
+              update({ time: Math.max(0, Number(e.target.value)) })
+            }
           />
-        </div>
-        <div className="form-group">
-          <label className="form-label">Easing</label>
+        </label>
+        <label>
+          Move duration (seconds)
+          <input
+            aria-label="Camera move duration"
+            className="form-input"
+            type="number"
+            min="0"
+            step="0.1"
+            value={(kf.duration ?? 2000) / 1000}
+            onChange={(e) =>
+              update({ duration: Math.max(0, Number(e.target.value)) * 1000 })
+            }
+          />
+        </label>
+        <label>
+          Movement
           <select
+            aria-label="Camera easing"
             className="form-select"
-            value={kf.easing}
-            onChange={(e) => update({ easing: e.target.value as CameraKeyframe['easing'] })}
+            value={kf.easing || 'quadratic'}
+            onChange={(e) =>
+              update({ easing: e.target.value as CameraKeyframe['easing'] })
+            }
           >
-            <option value="quadratic">Quadratic</option>
-            <option value="cubic">Cubic</option>
-            <option value="sine">Sine</option>
+            <option value="quadratic">Smooth</option>
+            <option value="cubic">Gentle start and finish</option>
+            <option value="sine">Soft glide</option>
           </select>
-        </div>
+        </label>
       </div>
+      <details className="lesson-reference"><summary>How guided movement works</summary><p>
+        At each cue, the reader moves smoothly from their current view toward this destination, then is free to explore. Dragging interrupts the current move until the next cue. The camera preview shows the authored route without reader input. Use 0 duration for a cut.
+      </p></details>
+      <details>
+        <summary>Precise position & rotation</summary>
+        <Vec3Input
+          label="Position"
+          value={kf.position}
+          onChange={(position) => update({ position })}
+        />
+        <Vec3Input
+          label="Rotation (radians)"
+          value={kf.rotation}
+          step={0.1}
+          onChange={(rotation) => update({ rotation })}
+        />
+      </details>
     </>
   )
 }

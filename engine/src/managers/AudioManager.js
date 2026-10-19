@@ -13,15 +13,16 @@ export class AudioManager {
     this.sounds = new Map()
     this.listener = null
     this.currentAudio = null
-    
+
     this.audioEndCallbacks = new Map()
     this.positionUpdateCallbacks = new Map()
     this.timeUpdateCallbacks = new Map()
-    
+
     // Manual time tracking (more reliable than Three.js internals)
+    this.playOffsets = new Map()
     this.playStartTimes = new Map() // audioId -> performance.now() when play started
     this.timeTrackingActive = new Map() // audioId -> boolean
-    
+
     this.initListener()
   }
 
@@ -30,9 +31,11 @@ export class AudioManager {
    */
   initListener() {
     if (!this.camera || typeof THREE === 'undefined') return
-    
+
     // Check if camera already has an AudioListener
-    let listener = this.camera.children.find(child => child instanceof THREE.AudioListener)
+    let listener = this.camera.children.find(
+      (child) => child instanceof THREE.AudioListener
+    )
     if (!listener) {
       listener = new THREE.AudioListener()
       this.camera.add(listener)
@@ -63,7 +66,9 @@ export class AudioManager {
 
     return new Promise((resolve, reject) => {
       if (!this.listener) {
-        console.warn('AudioListener not initialized, attempting to initialize...')
+        console.warn(
+          'AudioListener not initialized, attempting to initialize...'
+        )
         this.initListener()
         if (!this.listener) {
           reject(new Error('AudioListener not initialized'))
@@ -90,7 +95,7 @@ export class AudioManager {
             sound.setRefDistance(refDistance)
             sound.setMaxDistance(maxDistance)
             sound.setRolloffFactor(rolloffFactor)
-            
+
             if (position) {
               const pos = Array.isArray(position)
                 ? { x: position[0], y: position[1], z: position[2] }
@@ -101,7 +106,15 @@ export class AudioManager {
 
           // Store waypoints for position updates
           if (waypoints && waypoints.length > 0) {
-            sound.userData = { waypoints, currentWaypointIndex: 0 }
+            sound.userData = {
+              waypoints: [...waypoints].sort((a,b) => a.time-b.time).map((w) => ({
+                ...w,
+                position: Array.isArray(w.position)
+                  ? { x: w.position[0], y: w.position[1], z: w.position[2] }
+                  : w.position
+              })),
+              currentWaypointIndex: 0
+            }
           }
 
           // Set up time update callback
@@ -116,6 +129,8 @@ export class AudioManager {
 
           sound.onEnded = () => {
             console.log(`Audio ended: ${audioId}`)
+            sound.isPlaying = false
+            this.playOffsets.set(audioId, buffer.duration)
             this.timeTrackingActive.set(audioId, false)
             const callback = this.audioEndCallbacks.get(audioId)
             if (callback) callback()
@@ -131,7 +146,11 @@ export class AudioManager {
         },
         (error) => {
           console.error(`Failed to load audio ${audioId} from ${url}:`, error)
-          reject(new Error(`Failed to load audio ${audioId}: ${error?.message || 'Unknown error'}`))
+          reject(
+            new Error(
+              `Failed to load audio ${audioId}: ${error?.message || 'Unknown error'}`
+            )
+          )
         }
       )
     })
@@ -178,8 +197,8 @@ export class AudioManager {
       const startTime = this.playStartTimes.get(audioId)
       if (startTime === undefined) return
 
-      const currentTime = (performance.now() - startTime) / 1000 // Convert to seconds
-      
+      const currentTime = this.getCurrentTime(audioId) // Convert to seconds
+
       // Call time update callback
       const callback = this.timeUpdateCallbacks.get(audioId)
       if (callback) {
@@ -207,21 +226,28 @@ export class AudioManager {
     if (!sound || !sound.userData?.waypoints) return
 
     const waypoints = sound.userData.waypoints
-    
+
     // Find current waypoint
     for (let i = waypoints.length - 1; i >= 0; i--) {
       if (currentTime >= waypoints[i].time) {
         const current = waypoints[i]
         const next = waypoints[i + 1]
-        
+
         if (next) {
           // Interpolate between waypoints
-          const progress = (currentTime - current.time) / (next.time - current.time)
+          const progress =
+            (currentTime - current.time) / (next.time - current.time)
           const clampedProgress = Math.min(Math.max(progress, 0), 1)
           const pos = {
-            x: current.position.x + (next.position.x - current.position.x) * clampedProgress,
-            y: current.position.y + (next.position.y - current.position.y) * clampedProgress,
-            z: current.position.z + (next.position.z - current.position.z) * clampedProgress
+            x:
+              current.position.x +
+              (next.position.x - current.position.x) * clampedProgress,
+            y:
+              current.position.y +
+              (next.position.y - current.position.y) * clampedProgress,
+            z:
+              current.position.z +
+              (next.position.z - current.position.z) * clampedProgress
           }
           sound.position.set(pos.x, pos.y, pos.z)
         } else {
@@ -240,6 +266,7 @@ export class AudioManager {
   pause(audioId) {
     const sound = this.sounds.get(audioId)
     if (sound && sound.isPlaying) {
+      this.playOffsets.set(audioId, this.getCurrentTime(audioId))
       sound.pause()
       this.timeTrackingActive.set(audioId, false)
     }
@@ -255,6 +282,9 @@ export class AudioManager {
       if (sound.isPlaying) {
         sound.stop()
       }
+      sound.offset = 0
+      sound._progress = 0
+      this.playOffsets.set(audioId, 0)
       this.timeTrackingActive.set(audioId, false)
     }
   }
@@ -276,10 +306,11 @@ export class AudioManager {
    */
   getCurrentTime(audioId) {
     const startTime = this.playStartTimes.get(audioId)
-    if (startTime !== undefined) {
-      return (performance.now() - startTime) / 1000
+    const offset = this.playOffsets.get(audioId) || 0
+    if (startTime !== undefined && this.timeTrackingActive.get(audioId)) {
+      return offset + (performance.now() - startTime) / 1000
     }
-    return 0
+    return offset
   }
 
   /**
@@ -349,7 +380,12 @@ export class AudioManager {
     const sound = this.sounds.get(audioId)
     if (sound) {
       if (sound.isPlaying) sound.stop()
-      sound.disconnect()
+      sound.parent?.remove(sound)
+      // A loaded, unplayed object sound has no source node yet.
+      if (sound.source && sound._connected) sound.disconnect()
+      sound.panner?.disconnect()
+      sound.gain?.disconnect()
+      this.playOffsets.delete(audioId)
       this.sounds.delete(audioId)
       this.audioEndCallbacks.delete(audioId)
       this.timeUpdateCallbacks.delete(audioId)
