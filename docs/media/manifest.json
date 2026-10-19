@@ -1,0 +1,49 @@
+{
+  "capture": "Real browser UI captures; silent edited demos. Diagram illustrates the portable format.",
+  "resolution": "1600x900",
+  "overviewSeconds": 36,
+  "clips": [
+    {
+      "id": "01-live-playback",
+      "title": "See the story as you build it.",
+      "duration": 11.0,
+      "videoBytes": 531895,
+      "gifBytes": 792249
+    },
+    {
+      "id": "02-screen-designer",
+      "title": "Design the first impression.",
+      "duration": 9.5,
+      "videoBytes": 295597,
+      "gifBytes": 495473
+    },
+    {
+      "id": "03-guided-camera",
+      "title": "Give every moment a viewpoint.",
+      "duration": 9.5,
+      "videoBytes": 396909,
+      "gifBytes": 593347
+    },
+    {
+      "id": "04-caption-design",
+      "title": "Make the words part of the design.",
+      "duration": 7,
+      "videoBytes": 108679,
+      "gifBytes": 293509
+    },
+    {
+      "id": "05-start-create",
+      "title": "Start with a space. Make it yours.",
+      "duration": 9.0,
+      "videoBytes": 360494,
+      "gifBytes": 593808
+    },
+    {
+      "id": "06-portable-story",
+      "title": "An entire experience. One JSON file.",
+      "duration": 12,
+      "videoBytes": 459544,
+      "gifBytes": 859097
+    }
+  ]
+}
