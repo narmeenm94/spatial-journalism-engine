@@ -103,7 +103,7 @@ Screen designer has separate resizable Layers and Settings sidebars. The artboar
 
 Screen designer → Style → Browse fonts & upload offers twelve bundled font families, or WOFF2 / WOFF / TTF / OTF uploads. Project settings offers the same picker for the story typeface. Added fonts are stored under `ui.branding.fonts`; their binary files are stored as data URLs in `embeddedAssets`. Each element stores its typeface, weight and style. Font files and library licenses survive export and reopen; no CDN is needed by a portable story. Legacy `branding.fontFiles` stories remain supported. System font choices are explicitly device-dependent.
 
-The bundled families are distributed through Fontsource under their included open-font licenses. All supplied language subsets and styles are embedded when adding a family; available glyph coverage varies by family. Upload fonts with the right glyph coverage for other scripts.
+The bundled families are distributed through Fontsource under their included open-font licenses. All supplied language subsets and styles are embedded when adding a family; available glyph coverage varies by family. Upload fonts with the right glyph coverage for other scripts. Only embed font files you have permission to redistribute. The rebuilt Shadows example uses a system font and does not distribute the broadcaster’s proprietary typeface.
 
 ### Live editor playback
 

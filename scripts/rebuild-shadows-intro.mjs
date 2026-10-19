@@ -5,7 +5,7 @@ const target=path.resolve('examples/shadows-rebuilt')
 const story=JSON.parse(fs.readFileSync(path.join(target,'story.json'),'utf8'))
 const read=p=>fs.readFileSync(path.join(original,p),'utf8')
 const copy=p=>{fs.mkdirSync(path.dirname(path.join(target,'assets',p)),{recursive:true});fs.copyFileSync(path.join(original,'assets',p),path.join(target,'assets',p));return p}
-for(const p of ['bg-video.mp4','icons/info-icon2.png','icons/close_button.svg','logos/HXRC_logo_white_PNG.png','YleNext-Regular.woff2','YleNext-Regular.woff'])copy(p)
+for(const p of ['bg-video.mp4','icons/info-icon2.png','icons/close_button.svg','logos/HXRC_logo_white_PNG.png'])copy(p)
 const css=read('styles/mode-selection.css')
 for(const name of ['guided','exploration']) {
  const data=css.match(new RegExp('\\.'+name+'-icon \\{[\\s\\S]*?url\\("(data:[^"]+)"\\)'))[1]
@@ -13,8 +13,8 @@ for(const name of ['guided','exploration']) {
 }
 const loc=(en,fi=en)=>({en,fi})
 const box=(x,y,width,height)=>({x,y,width,height})
-const element=(id,type,text,layout,mobileLayout,extra={})=>({id,type,text,layout,mobileLayout,style:{fontSize:20,color:'#ffffff',background:'transparent',radius:0,align:'center',font:'YleNext, Arial, sans-serif'},animation:'none',...extra})
-const button=(id,text,layout,mobileLayout,action,extra={})=>element(id,'button',text,layout,mobileLayout,{action,...extra,style:{fontSize:18,color:'#fff',background:'#00000080',radius:0,align:'center',font:'YleNext, Arial, sans-serif',borderWidth:1,borderColor:'#ffffff',...extra.style}})
+const element=(id,type,text,layout,mobileLayout,extra={})=>({id,type,text,layout,mobileLayout,style:{fontSize:20,color:'#ffffff',background:'transparent',radius:0,align:'center',font:'Arial, sans-serif'},animation:'none',...extra})
+const button=(id,text,layout,mobileLayout,action,extra={})=>element(id,'button',text,layout,mobileLayout,{action,...extra,style:{fontSize:18,color:'#fff',background:'#00000080',radius:0,align:'center',font:'Arial, sans-serif',borderWidth:1,borderColor:'#ffffff',...extra.style}})
 const img=(id,src,text,l,m,extra={})=>element(id,'image',text,l,m,{src,...extra})
 const background={color:'#000000',image:'',video:'bg-video.mp4',overlay:0}
 const screen=(id,name,elements,extra={})=>({id,name,background:{...background},elements,...extra})
@@ -23,7 +23,7 @@ const home=screen('home','Shadows welcome',[
  img('ulkolinja','logos/ulkolinja_logo_musta.png',loc('Ulkolinja'),box(42,5,16,8),box(30,5,40,7)),
  element('subtitle','text',loc('LIFE AND DEATH BATTLE AT THE FRONTLINE CLINIC','ELÄMÄ JA KUOLEMA TAISTELEVAT RINTAMAKLINIKALLA'),box(15,21,70,8),box(10,18,80,9)),
  img('title','images/bg-text.png',loc('Shadows of the stabilisation point','Rintamaklinikan varjot'),box(10,31,80,28),box(10,29,80,28),{srcByLanguage:{en:'images/bg-text.png',fi:'images/fin-bg-text.png'}}),
- element('language-label','text',loc('Language','Kieli'),box(20,63,20,6),box(10,61,25,6),{style:{fontSize:18,color:'#fff',background:'transparent',radius:0,align:'left',font:'YleNext, Arial, sans-serif'}}),
+ element('language-label','text',loc('Language','Kieli'),box(20,63,20,6),box(10,61,25,6),{style:{fontSize:18,color:'#fff',background:'transparent',radius:0,align:'left',font:'Arial, sans-serif'}}),
  button('english',loc('ENGLISH'),box(47,63,15,6),box(39,61,24,6),{type:'language',language:'en'}),
  button('finnish',loc('SUOMI'),box(65,63,15,6),box(66,61,24,6),{type:'language',language:'fi'}),
  button('start',loc('START','ALOITA'),box(20,73,60,8),box(10,72,80,7),{type:'screen',screenId:'choose'}),
@@ -61,7 +61,7 @@ const {infoPageContentData:info}=await import('data:text/javascript;base64,'+Buf
 const infoText=Object.fromEntries(['en','fi'].map(lang=>[lang,info.infoTextContent[lang].replace(/<br\s*\/?>(\s*)/g,'\n')+'\n\n'+info.creditsTitle[lang]+'\n\n'+info.credits.map(c=>c.role[lang]+'\n'+c.name).join('\n\n')+'\n\n'+info.copyrightText[lang]]))
 const information=screen('info','Information and credits',[
  element('title','text',info.infoTitleText,box(15,8,70,8),box(10,8,80,7)),
- element('content','text',infoText,box(20,20,60,65),box(6,20,88,65),{scrollable:true,style:{fontSize:18,color:'#fff',background:'#00000055',radius:0,align:'left',font:'YleNext, Arial, sans-serif'}}),
+ element('content','text',infoText,box(20,20,60,65),box(6,20,88,65),{scrollable:true,style:{fontSize:18,color:'#fff',background:'#00000055',radius:0,align:'left',font:'Arial, sans-serif'}}),
  button('close',loc('Close','Sulje'),box(93,3,4,7),box(86,3,10,6),{type:'screen',screenId:'home'},{src:'icons/close_button.svg',style:{borderWidth:0}}),...logos()
 ])
 const film=screen('intro-film','Intro film',[button('skip',loc('SKIP','OHITA'),box(80,5,15,7),box(65,5,30,6),{type:'start',mode:'auto'},{showAfter:2})],{background:{color:'#000000',image:'',video:'',overlay:0},introVideo:{sources:{en:'video/Intro_EN.mp4',fi:'video/Intro_FIN.mp4'},muted:false,onEnd:{type:'start',mode:'auto'}}})
