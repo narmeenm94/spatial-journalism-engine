@@ -22,6 +22,8 @@ export interface ProjectConfig {
   modes: string[]
   ar?: {
     backend?: 'auto' | 'webxr' | '8thwall'
+    runtime?: 'standard' | 'exported'
+    coaching?: boolean
     tracking?: 'world' | 'image'
     imageTargets?: Array<{
       imagePath: string
@@ -50,6 +52,8 @@ export interface CameraKeyframe {
   position: [number, number, number]
   rotation: [number, number, number]
   duration: number
+  arPosition?: [number, number, number]
+  arRotation?: [number, number, number]
   easing: 'quadratic' | 'cubic' | 'sine'
 }
 
@@ -72,6 +76,7 @@ export interface CameraConfig {
   navigation?: 'standard' | 'immersive'
   chooseMode?: boolean
   guidedTracking?: 'orientation' | 'world'
+  trackedHeight?: { android?: number; ios?: number; fallback?: number; guided?: number }
   rotationEnabled?: boolean
   defaultMode?: 'guided' | 'explore'
   guided?: Record<string, CameraKeyframe[]>
@@ -310,6 +315,7 @@ export interface EndingConfig {
     returnHome?: Record<string, string>
   }
   triggerMode: 'lastVideo' | 'characterFade' | 'audioEnd'
+  mediaBehavior?: 'wait' | 'continue'
   triggerCharacterId?: string
   triggerSceneId?: string
   endingTrigger?: string
@@ -337,6 +343,9 @@ export interface UIConfig {
     }
   }
   controls: {
+    skipPlacement?: 'menu' | 'overlay'
+    skipIcon?: string
+    skipCooldown?: number
     recenterPlacement?: 'menu' | 'overlay'
     recenterIcon?: string
     exploration: Record<string, string>

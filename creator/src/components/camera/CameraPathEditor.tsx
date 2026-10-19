@@ -94,6 +94,13 @@ export function CameraPathEditor() {
         {story.camera.navigation === 'immersive' && <label>Guided phone tracking<select className="form-select" aria-label="Guided phone tracking" value={story.camera.guidedTracking || 'orientation'} onChange={e => useStore.getState().updateStory(d => { d.camera.guidedTracking = e.target.value as 'orientation' | 'world' }, 'Change guided tracking')}>
           <option value="orientation">Look around + touch movement</option><option value="world">Physical movement + touch (SLAM)</option>
         </select></label>}
+        {story.camera.navigation === 'immersive' && <details>
+          <summary>Phone eye height</summary>
+          <p>Keep the space upright. Adjust the height above your scene's floor. Explore adds the phone's tracked height.</p>
+          {([['android', 'Android Explore', 1.25], ['ios', 'iPhone / iPad Explore', 0.5], ['fallback', 'Other phones', 0.5], ['guided', 'Guided eye height', 1.5]] as const).map(([key, label, fallback]) => <label key={key}>{label} (m)
+            <input className="form-input" type="number" step="0.05" aria-label={label + ' height'} value={story.camera.trackedHeight?.[key] ?? fallback} onChange={e => { const value = e.currentTarget.valueAsNumber; if (Number.isFinite(value)) useStore.getState().updateStory(d => { d.camera.trackedHeight = {...d.camera.trackedHeight, [key]: value} }, 'Change phone eye height') }} />
+          </label>)}
+        </details>}
       </div>
       </details>
       <div className="camera-path-actions">
@@ -276,7 +283,7 @@ function KeyframeEditor({
         </label>
       </div>
       <details className="lesson-reference"><summary>How guided movement works</summary><p>
-        At each cue, the reader moves smoothly from their current view toward this destination, then is free to explore. Dragging interrupts the current move until the next cue. The camera preview shows the authored route without reader input. Use 0 duration for a cut.
+        At each cue, the reader moves smoothly from their current view toward this destination, then is free to explore. Phone AR uses the same upright rig for guidance and recentering; the current guided move completes before touch movement takes over. Web 3D allows a drag to interrupt the move. Use 0 duration for a cut.
       </p></details>
       <details>
         <summary>Precise position & rotation</summary>
@@ -291,6 +298,10 @@ function KeyframeEditor({
           step={0.1}
           onChange={(rotation) => update({ rotation })}
         />
+      </details>
+      <details><summary>Phone AR destination</summary>
+        <label><input type="checkbox" checked={!!kf.arPosition} onChange={e => update(e.target.checked ? {arPosition: [...kf.position], arRotation: [...kf.rotation]} : {arPosition: undefined, arRotation: undefined})} /> Use a separate phone destination</label>
+        {kf.arPosition && <><Vec3Input label="Phone position" value={kf.arPosition} onChange={arPosition => update({arPosition})} /><Vec3Input label="Phone rotation (radians)" value={kf.arRotation || kf.rotation} step={0.1} onChange={arRotation => update({arRotation})} /></>}
       </details>
     </>
   )

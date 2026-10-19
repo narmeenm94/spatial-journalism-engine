@@ -126,6 +126,7 @@ export class SceneManager {
       this.sceneEnded = false
       this.audioSchedule = []
       this.characterSchedule = []
+      this.activationVersion = (this.activationVersion || 0) + 1
 
       // Set current scene on character manager for tracking
       if (this.characterManager) {
@@ -480,8 +481,13 @@ export class SceneManager {
     for (const [index, config] of (scene.audio || []).entries()) {
       if (!config.url) continue
       const id = config.id || scene.id + '_audio_' + index
+      const item = { id, config, duration: 0, started: false, ended: false }
+      const version = this.activationVersion
       const sound = await this.audioManager.loadAudio(id, {
         ...config,
+        onEnded: () => {
+          if (version === this.activationVersion && this.currentSceneId === scene.id) item.ended = true
+        },
         url:
           this.parser?.resolvePath(
             config.url,
@@ -491,18 +497,14 @@ export class SceneManager {
       })
       if (config.positional)
         (this.engine.roomModel || this.engine.scene)?.add(sound)
-      this.audioSchedule.push({
-        id,
-        config,
-        duration:
+      item.duration =
           config.duration > 0
             ? Math.min(
                 config.duration / 1000,
                 sound.buffer?.duration || Infinity
               )
-            : sound.buffer?.duration || 0,
-        started: false
-      })
+            : sound.buffer?.duration || 0
+      this.audioSchedule.push(item)
     }
   }
 
@@ -550,6 +552,7 @@ export class SceneManager {
    */
   setupEndingCondition() {
     this.endingPlayed = false
+    this.endingReadyAt = null
   }
 
   /**
@@ -558,6 +561,7 @@ export class SceneManager {
   setupVideoTriggers(videos) {
     this.videoTriggers.clear()
     this.lastVideoId = null
+    this.finishedVideos = new Set()
 
     // Find the video with the highest triggerAt (the last video to play)
     let maxTriggerAt = -1
@@ -661,11 +665,13 @@ export class SceneManager {
     // Multiple projections may play together.
     // Play new video with fade in
     const originScene = this.currentSceneId
+    const version = this.activationVersion
     const played = await this.videoProjector.playVideo(
       videoId,
       this.currentScene?.videos?.find((v) => v.id === videoId)?.fadeIn ?? 1000
     )
-    if (!played || this.currentSceneId !== originScene) return
+    if (this.currentSceneId !== originScene || version !== this.activationVersion) return
+    if (!played) { this.finishedVideos.add(videoId); return }
     if (this.paused) this.videoProjector.pause(videoId)
     this.activeVideos.add(videoId)
 
@@ -676,8 +682,11 @@ export class SceneManager {
       videoData.element.addEventListener(
         'ended',
         () => {
+          if (this.currentSceneId !== originScene || version !== this.activationVersion) return
+          this.finishedVideos.add(videoId)
           console.log(`Video ${videoId} ended, fading out`)
           this.videoProjector.fadeOutVideo(videoId, 500).then(() => {
+            if (this.currentSceneId !== originScene || version !== this.activationVersion) return
             this.videoProjector.removeVideo(videoId)
             this.activeVideos.delete(videoId)
             console.log(`Video ${videoId} removed after fade out`)
@@ -686,7 +695,7 @@ export class SceneManager {
           // Check if this is the last video in the final scene and endingTrigger is "lastVideo"
           const endingConfig = this.engine?.story?.ending
           if (
-            endingConfig?.endingTrigger === 'lastVideo' &&
+            (endingConfig?.triggerMode || endingConfig?.endingTrigger) === 'lastVideo' &&
             videoId === this.lastVideoId &&
             (endingConfig.triggerSceneId || this.getAllScenes().at(-1)?.id) ===
               this.currentSceneId
@@ -694,10 +703,7 @@ export class SceneManager {
             console.log(
               `Last video ${videoId} ended in final scene - triggering ending sequence (3s delay)`
             )
-            const endingTimeout = setTimeout(() => {
-              this.engine.handleComplete()
-            }, 3000)
-            this.pendingTimeouts.push(endingTimeout)
+            this.endingReadyAt = this.elapsed + 3
           }
         },
         { once: true }
@@ -876,7 +882,22 @@ export class SceneManager {
   update(delta) {
     if (this.paused || this.isTransitioning || !this.currentScene?.isActive)
       return
-    this.elapsed = (this.elapsed || 0) + Math.max(0, delta)
+    let nextTime = (this.elapsed || 0) + Math.max(0, delta)
+    // The first scheduled non-looping narration owns the chapter clock.
+    // Before it starts and after it finishes, silent portions use frame time.
+    const master = (this.audioSchedule || []).filter(a => a.config.autoplay !== false && !a.config.loop)
+      .sort((a, b) => (a.config.delay || 0) - (b.config.delay || 0))[0]
+    if (master && this.audioManager?.getCurrentTime) {
+      const start = (master.config.delay || 0) / 1000
+      if (!master.started && nextTime >= start) {
+        master.started = true
+        this.audioManager.play(master.id)
+      }
+      if (master.started && !master.ended && !master.stopped)
+        nextTime = start + this.audioManager.getCurrentTime(master.id)
+      else if (master.ended || master.stopped) nextTime = Math.max(nextTime, start + master.duration)
+    }
+    this.elapsed = nextTime
     const time = this.elapsed
     this.characterManager?.update(delta)
     for (const item of this.audioSchedule || []) {
@@ -936,8 +957,7 @@ export class SceneManager {
         (!ending.triggerSceneId ||
           ending.triggerSceneId === this.currentSceneId)
       ) {
-        this.endingPlayed = true
-        this.engine.handleComplete()
+        this.endingReadyAt ??= time
       }
     }
     this.handleAudioTimeUpdate(this.currentSceneId, time)
@@ -949,9 +969,20 @@ export class SceneManager {
       ) {
         this.videoProjector.removeVideo(video.id)
         this.activeVideos.delete(video.id)
+        this.finishedVideos.add(video.id)
       }
     }
     const scene = this.currentScene
+    // A visual trigger can become ready before narration or a buffering video
+    // finishes. It must not stop those media by completing the experience.
+    const pendingMedia = this.hasPendingMedia()
+    const continueMedia = this.engine?.story?.ending?.mediaBehavior === 'continue'
+    if (!this.endingPlayed && this.endingReadyAt !== null && time >= this.endingReadyAt && (!pendingMedia || continueMedia)) {
+      this.endingPlayed = true
+      if (pendingMedia && continueMedia) this.engine.showEnding()
+      else this.engine.handleComplete()
+      return
+    }
     const audioEnd = Math.max(
       0,
       ...(this.audioSchedule || [])
@@ -999,7 +1030,19 @@ export class SceneManager {
     const ending=this.engine?.story?.ending
     const endingCharacter=ending?.triggerMode==='characterFade'&&(!ending.triggerSceneId||ending.triggerSceneId===scene.id)?scene.characters?.find(c=>c.id===ending.triggerCharacterId):null
     const triggerEnd=endingCharacter?characterEndingTime(endingCharacter,ending):0
-    if (time >= Math.max(end,Number.isFinite(triggerEnd)?triggerEnd:0)) this.handleSceneEnd(scene.id)
+    if (!pendingMedia && time >= Math.max(end,Number.isFinite(triggerEnd)?triggerEnd:0,this.endingReadyAt || 0)) this.handleSceneEnd(scene.id)
+  }
+
+  hasPendingMedia() {
+    const audioPending = (this.audioSchedule || []).some(item => {
+      if (item.config.autoplay === false || item.config.loop || item.stopped || item.ended) return false
+      // Real audio reports completion through its source's ended event.
+      if (this.audioManager?.getCurrentTime) return true
+      return this.elapsed < (item.config.delay || 0) / 1000 + item.duration
+    })
+    const videoPending = (this.currentScene?.videos || []).some(video =>
+      !video.loop && !this.finishedVideos?.has(video.id) && this.videoProjector?.videos.has(video.id))
+    return audioPending || videoPending
   }
 
   /**

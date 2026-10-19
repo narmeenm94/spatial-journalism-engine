@@ -140,6 +140,7 @@
             container: document.getElementById('sj-container'),
             onReady: function() {
               document.getElementById('sj-loading').style.display = 'none';
+              (window.opener || window.parent).postMessage({type:'engineLoaded'}, allowedOrigin);
             },
             onError: function(error) {
               console.error('Engine error:', error);

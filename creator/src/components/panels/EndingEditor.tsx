@@ -44,6 +44,12 @@ export function EndingEditor() {
           <option value="audioEnd">When audio ends</option>
           <option value="characterFade">When character fades out</option>
         </select>
+        <label className="form-label">Chapter media</label>
+        <select className="form-select" aria-label="Ending media behavior" value={ending.mediaBehavior || 'wait'} onChange={e => updateStory(d => { d.ending.mediaBehavior = e.target.value as 'wait' | 'continue' }, 'Set ending media behavior')}>
+          <option value="wait">Finish before the ending</option>
+          <option value="continue">Continue beneath the ending</option>
+        </select>
+        <p className="form-hint">Keep narration playing under your closing words, or let all chapter media finish first.</p>
       </div>
 
       <div className="form-group"><label className="form-label">Ending chapter</label><select className="form-select" aria-label="Ending chapter" value={ending.triggerSceneId || story.scenes.at(-1)?.id || ''} onChange={e => updateStory(d => { d.ending.triggerSceneId=e.target.value; d.ending.triggerCharacterId=undefined }, 'Set ending chapter')}>

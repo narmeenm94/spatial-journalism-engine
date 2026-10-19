@@ -1,3 +1,4 @@
+import { resolveExperienceMode } from '../xr/device.js'
 import { installStoryFonts } from '../ui/storyFonts.js'
 import { renderDesignedScreen, mergeLaunchChoice, resolveScreenTarget, screenChoice } from '../ui/screenDesign.js'
 /**
@@ -19,6 +20,7 @@ export class UIManager {
     this.onLanguageChange = options.onLanguageChange
     this.onModeSelect = options.onModeSelect
     this.onStart = options.onStart
+    this.motionPermission = options.motionPermission
   }
 
   /**
@@ -394,10 +396,22 @@ export class UIManager {
       if(!screen)return
       screenId=screen.id;launch={...launch,...screenChoice(screen,launch)}
       const requestedPlatform=launch.mode!=='auto'?launch.mode:new URLSearchParams(window.location.search).get('mode')
-      const mobileDevice=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)||navigator.maxTouchPoints>1
-      const platform=requestedPlatform||(mobileDevice&&this.projectConfig.modes?.includes('ar')?'ar':this.projectConfig.modes?.length===1?this.projectConfig.modes[0]:'3d')
-      const requireStartGesture=platform==='vr'||(platform==='ar'&&this.projectConfig.ar?.backend!=='8thwall')
-      cleanup=renderDesignedScreen(canvas,screen,{requireStartGesture,navigation:launch.navigation,language:this.language,mobile:media.matches,resolveAsset:p=>this.resolveAssetPath(p),onAction:action=>{
+      const platform=resolveExperienceMode(requestedPlatform, this.projectConfig.modes)
+      const requireStartGesture=platform==='vr'||(platform==='ar'&&(this.projectConfig.ar?.backend!=='8thwall'||this.motionPermission?.needsGesture()))
+      cleanup=renderDesignedScreen(canvas,screen,{requireStartGesture,navigation:launch.navigation,language:this.language,mobile:media.matches,resolveAsset:p=>this.resolveAssetPath(p),onAction:async action=>{
+        // Mode cards request motion before tutorials and video playback.
+        const nextPlatform=resolveExperienceMode(action.mode && action.mode!=='auto' ? action.mode : platform, this.projectConfig.modes)
+        if(nextPlatform==='ar' && (action.navigation || action.type==='start') && this.motionPermission?.needsGesture()) {
+          try { await this.motionPermission.request() }
+          catch(error) {
+            let notice=shell.querySelector('[role="alert"]')
+            if(!notice){notice=document.createElement('p');notice.setAttribute('role','alert');notice.style.cssText='position:absolute;bottom:12px;left:5%;width:90%;padding:16px;background:#fff;color:#222;z-index:5';shell.appendChild(notice)}
+            notice.textContent=error.message
+            return
+          }
+          shell.querySelector('[role="alert"]')?.remove()
+          if(!shell.isConnected)return
+        }
         launch=mergeLaunchChoice(launch,action)
         if(action.type==='choice'){this.drawDesignedHome()}
         else if(action.type==='language'){this.setLanguage(action.language)}
@@ -435,7 +449,7 @@ export class UIManager {
    * @returns {HTMLElement} Mode selection element
    */
   createModeSelection() {
-    const modes = this.projectConfig.modes || ['ar', '3d']
+    const modes = [...new Set((this.projectConfig.modes || ['ar', '3d']).map(mode => resolveExperienceMode(mode, this.projectConfig.modes)))]
 
     const container = document.createElement('div')
     container.className = 'sj-mode-selection'

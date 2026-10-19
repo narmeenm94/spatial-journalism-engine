@@ -6,17 +6,22 @@ import { storyDocument, assertValidStory } from './storyDocument.ts'
 export async function portableStory(
   story: StoryConfig,
   assets: Record<string, File> = {},
-  baseUrl = ''
+  baseUrl = '',
+  signal?: AbortSignal
 ) {
+  signal?.throwIfAborted()
   const doc = storyDocument(story)
   const embedded = { ...doc.embeddedAssets }
-  for (const [path, file] of Object.entries(assets))
+  for (const [path, file] of Object.entries(assets)) {
+    signal?.throwIfAborted()
     embedded[path] = await fileDataURL(
       new Blob([file], { type: mediaType(path, file.type) })
     )
+  }
   if (Object.keys(embedded).length) doc.embeddedAssets = embedded
   const missing: string[] = []
   for (const path of mediaPaths(doc)) {
+    signal?.throwIfAborted()
     if (embedded[path] || path.startsWith('data:')) continue
     if (!baseUrl && !/^(https?:|blob:)/.test(path)) {
       missing.push(path)
@@ -29,13 +34,14 @@ export async function portableStory(
             (doc.project.assets.basePath || '') + path,
             baseUrl.endsWith('/') ? baseUrl : baseUrl + '/'
           ).href
-      const response = await fetch(url)
+      const response = await fetch(url, { signal })
       if (!response.ok) throw new Error('HTTP ' + response.status)
       const file = await response.blob()
       embedded[path] = await fileDataURL(
         new Blob([file], { type: mediaType(path, file.type) })
       )
     } catch {
+      signal?.throwIfAborted()
       missing.push(path)
     }
   }

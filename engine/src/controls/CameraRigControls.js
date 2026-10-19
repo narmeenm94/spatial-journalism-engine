@@ -65,6 +65,8 @@ export class CameraRigControls {
     this.onRecenter = options.onRecenter
     this.onNavigate = options.onNavigate
     this.tracked = !!options.tracked
+    this.trackingNavigation = options.trackingNavigation || null
+    this.trackingActive = !!options.trackingActive
     this.rotationEnabled = options.rotationEnabled !== false
   }
 
@@ -88,10 +90,10 @@ export class CameraRigControls {
     // Reset camera local position
     if (!this.tracked) this.camera.position.set(0, 0, 0)
 
-    // Set initial position — use initialPosition from story config if available,
+    // Set initial position using the story config if available,
     // otherwise fall back to recenterPosition (the "home" position)
-    const pos = this.settings.initialPosition || this.settings.recenterPosition
-    const rot = this.settings.initialRotation || this.settings.recenterRotation
+    const pos = (!this.tracked && this.settings.initialPosition) || this.settings.recenterPosition
+    const rot = (!this.tracked && this.settings.initialRotation) || this.settings.recenterRotation
     this.setPosition(
       new THREE.Vector3(pos.x, pos.y, pos.z),
       new THREE.Quaternion().setFromEuler(new THREE.Euler(rot.x, rot.y, rot.z))
@@ -147,6 +149,13 @@ export class CameraRigControls {
     const tempScale = new THREE.Vector3()
     rigWorldMatrix.decompose(outPosition, outQuaternion, tempScale)
 
+    if (this.tracked) {
+      // Keep gravity upright. Device pitch/roll belong to the tracked camera,
+      // never to its parent rig, including during recentering and guided moves.
+      outQuaternion.set(0, outQuaternion.y, 0, outQuaternion.w)
+      if (outQuaternion.lengthSq() < 1e-12) outQuaternion.identity()
+      outQuaternion.normalize()
+    }
     outQuaternion.normalize()
   }
 
@@ -217,9 +226,11 @@ export class CameraRigControls {
    */
   moveCamera(deltaY, deltaX) {
     if (!this.enabled) return
-    this.animationVersion = (this.animationVersion || 0) + 1
-    this.isAnimating = false
-    this.onNavigate?.()
+    if (!this.tracked) {
+      this.animationVersion = (this.animationVersion || 0) + 1
+      this.isAnimating = false
+      this.onNavigate?.()
+    }
     const moveDelta = deltaY * -this.settings.moveSpeed
     const rotateDelta = this.rotationEnabled ? deltaX * this.settings.rotateSpeed : 0
 
@@ -362,17 +373,19 @@ export class CameraRigControls {
     const version = this.animationVersion = (this.animationVersion || 0) + 1
     this.isAnimating = true
 
-    const startPosition = this.camera.getWorldPosition(new THREE.Vector3())
-    const startQuaternion = this.camera.getWorldQuaternion(new THREE.Quaternion())
+    const startPosition = this.tracked ? this.lastCameraWorldPosition.clone() : this.camera.getWorldPosition(new THREE.Vector3())
+    const startQuaternion = this.tracked ? this.lastCameraWorldQuaternion.clone() : this.camera.getWorldQuaternion(new THREE.Quaternion())
     const startTime = performance.now()
+    if (this.tracked) this.animationData = { position: startPosition.clone(), quaternion: startQuaternion.clone(), complete: false }
 
     const animate = (currentTime) => {
-      if (!this.enabled || version !== this.animationVersion) {
+      if (version !== this.animationVersion) return
+      if (!this.enabled) {
         this.isAnimating = false
         return
       }
       const elapsed = currentTime - startTime
-      const progress = Math.min(elapsed / duration, 1)
+      const progress = duration <= 0 ? 1 : Math.min(elapsed / duration, 1)
 
       // Ease in-out
       const easeProgress =
@@ -395,20 +408,20 @@ export class CameraRigControls {
         easeProgress
       )
 
-      this.calculateCameraRigValues(
-        currentPosition,
-        currentQuaternion,
-        this.cameraRig.position,
-        this.cameraRig.quaternion
-      )
-
-      this.lastCameraWorldPosition.copy(currentPosition)
-      this.lastCameraWorldQuaternion.copy(currentQuaternion)
+      if (this.tracked) {
+        // Like the source rig, sample the easing in RAF but solve against the
+        // fresh sensor pose in the XR frame, before applying height and bounds.
+        this.animationData = { position: currentPosition, quaternion: currentQuaternion, complete: progress >= 1 }
+      } else {
+        this.calculateCameraRigValues(currentPosition, currentQuaternion, this.cameraRig.position, this.cameraRig.quaternion)
+        this.lastCameraWorldPosition.copy(currentPosition)
+        this.lastCameraWorldQuaternion.copy(currentQuaternion)
+      }
 
       if (progress < 1) {
         requestAnimationFrame(animate)
       } else {
-        this.isAnimating = false
+        if (!this.tracked) this.isAnimating = false
       }
     }
 
@@ -438,22 +451,49 @@ export class CameraRigControls {
   /**
    * Update (call each frame)
    */
-  preserveTrackingPose() {
+  preserveTrackingPose(active = this.trackingActive) {
+    this.trackingActive = active
     this.pendingTrackingPose = {
       position: this.lastCameraWorldPosition.clone(),
       quaternion: this.lastCameraWorldQuaternion.clone()
     }
-    this.onNavigate?.()
   }
 
-  update() {
-    if (!this.enabled) return
+  prepareTrackedCamera() {
+    const policy = this.trackingNavigation
+    if (!this.tracked || !policy) return
+    if (policy.guided) this.camera.position.fromArray(policy.guidedPosition)
+    else if (policy.fixedHeight) this.camera.position.y = 0
+  }
+
+  applyTrackedHeight() {
+    const policy = this.trackingNavigation
+    if (!this.tracked || !policy || !this.cameraRig) return
+    this.prepareTrackedCamera()
+    const h = policy.heights
+    this.cameraRig.position.y = policy.guided || policy.fixedHeight ? h.guided
+      : policy.os === 'android' ? h.android
+      : policy.os === 'ios' ? h.ios
+      : this.trackingActive ? 0 : h.fallback
+  }
+
+  prepareFrame() {
     if (this.pendingTrackingPose) {
       this.setPosition(this.pendingTrackingPose.position, this.pendingTrackingPose.quaternion)
       this.pendingTrackingPose = null
     }
-    // Preserve authored height and tilt; only constrain manual exploration.
-    // Check boundaries
+    if (this.tracked && this.animationData) {
+      const pose = this.animationData
+      this.calculateCameraRigValues(pose.position, pose.quaternion, this.cameraRig.position, this.cameraRig.quaternion)
+      if (pose.complete) { this.animationData = null; this.isAnimating = false }
+    }
+  }
+
+  update(framePrepared = false) {
+    if (!this.enabled) return
+    if (!framePrepared) this.prepareFrame()
+    // Match the source's height policy after every tracked pose/animation.
+    this.applyTrackedHeight()
     this.checkBounds()
   }
 

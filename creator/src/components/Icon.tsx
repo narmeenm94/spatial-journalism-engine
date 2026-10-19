@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react'
 const paths: Record<string, string> = {
+  phone: 'M7 2h10v20H7ZM10 18h4',
   expand: 'M8 3H3v5m13-5h5v5M3 16v5h5m8 0h5v-5',
   restore: 'M3 8h5V3m8 0v5h5M3 16h5v5m8 0v-5h5',
   minus: 'M5 12h14',

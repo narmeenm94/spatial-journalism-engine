@@ -4,6 +4,7 @@ export function mediaPaths(story: StoryConfig): string[] {
   const paths: unknown[] = [
     story.project.assets.environment,
     story.ui?.controls?.recenterIcon,
+    story.ui?.controls?.skipIcon,
     ...screenDesignMedia(story.ui?.screenDesigner),
     ...(story.ambience || []).map(a => a.file),
     ...(story.project.ar?.imageTargets || []).map((target) => target.imagePath),

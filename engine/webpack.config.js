@@ -1,4 +1,5 @@
 const path = require('path')
+const crypto = require('crypto')
 const HtmlWebpackPlugin = require('html-webpack-plugin')
 const CopyWebpackPlugin = require('copy-webpack-plugin')
 
@@ -35,6 +36,19 @@ module.exports = {
     ]
   },
   plugins: [
+    {
+      apply(compiler) {
+        compiler.hooks.thisCompilation.tap('PlayerManifest', compilation => {
+          compilation.hooks.processAssets.tap({ name: 'PlayerManifest', stage: compiler.webpack.Compilation.PROCESS_ASSETS_STAGE_REPORT }, () => {
+            const files = compilation.getAssets().filter(asset => !asset.name.endsWith('.map')).map(asset => ({
+              path: asset.name,
+              sha256: crypto.createHash('sha256').update(asset.source.buffer()).digest('hex')
+            })).sort((a, b) => a.path.localeCompare(b.path))
+            compilation.emitAsset('player-manifest.json', new compiler.webpack.sources.RawSource(JSON.stringify({ version: 1, files }, null, 2)))
+          })
+        })
+      }
+    },
     new HtmlWebpackPlugin({
       template: './engine/src/index.html',
       filename: 'index.html',
@@ -54,6 +68,11 @@ module.exports = {
         {
           from: 'external/xr',
           to: 'vendor/8thwall-slam',
+          info: { minimized: true }
+        },
+        {
+          from: 'external/scripts/coaching-overlay.js',
+          to: 'vendor/coaching-overlay.js',
           info: { minimized: true }
         },
         {

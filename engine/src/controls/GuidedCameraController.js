@@ -1,9 +1,10 @@
 /** Timed destinations, always approached from the reader's current view. */
 export class GuidedCameraController {
-  constructor(camera, cameraRig, guidedConfig = {}) {
+  constructor(camera, cameraRig, guidedConfig = {}, options = {}) {
     this.camera = camera
     this.cameraRig = cameraRig
     this.sceneCameraPositions = guidedConfig
+    this.animateTrackedPose = options.animateTrackedPose
   }
   startSceneTracking(sceneId, getTime) {
     this.stopSceneTracking()
@@ -18,9 +19,16 @@ export class GuidedCameraController {
     this.camera.updateWorldMatrix(true, false)
     this.camera.updateMatrix()
     const localInverse = this.cameraRig ? this.camera.matrix.clone().invert() : new THREE.Matrix4()
-    const toPosition = new THREE.Vector3().fromArray(cue.position)
-    const toQuaternion = new THREE.Quaternion().setFromEuler(new THREE.Euler(...cue.rotation))
+    const toPosition = new THREE.Vector3().fromArray(this.animateTrackedPose && cue.arPosition || cue.position)
+    const toQuaternion = new THREE.Quaternion().setFromEuler(new THREE.Euler(...(this.animateTrackedPose && cue.arRotation || cue.rotation)))
     this.destination = cue
+    if (this.animateTrackedPose) {
+      // The original guided controller sends a destination to the same rig
+      // animation used by recentering. Do not animate a second parent transform.
+      this.animateTrackedPose(toPosition, toQuaternion, duration)
+      this.transition = null
+      return
+    }
     this.transition = {
       fromPosition: this.camera.getWorldPosition(new THREE.Vector3()), fromQuaternion: this.camera.getWorldQuaternion(new THREE.Quaternion()), localInverse,
       toPosition, toQuaternion, start: now, duration: duration / 1000, easing: cue.easing

@@ -107,6 +107,17 @@
                   }
                 }
               }
+            },
+            "runtime": {
+              "enum": [
+                "standard",
+                "exported"
+              ],
+              "description": "Framework paired with the original exported SLAM runtime, or the standard framework."
+            },
+            "coaching": {
+              "type": "boolean",
+              "default": true
             }
           },
           "allOf": [
@@ -246,6 +257,12 @@
                   },
                   "minItems": 3,
                   "maxItems": 3
+                },
+                "arPosition": {
+                  "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3
+                },
+                "arRotation": {
+                  "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3
                 }
               }
             }
@@ -267,6 +284,17 @@
             "orientation",
             "world"
           ]
+        },
+        "trackedHeight": {
+          "type": "object",
+          "description": "Full-space AR rig height offsets in metres. Device tracking adds its local height in Explore; orientation-only Guided uses a fixed eye height.",
+          "additionalProperties": false,
+          "properties": {
+            "android": { "type": "number" },
+            "ios": { "type": "number" },
+            "fallback": { "type": "number" },
+            "guided": { "type": "number" }
+          }
         },
         "rotationEnabled": {
           "type": "boolean"
@@ -1312,6 +1340,20 @@
             },
             "recenterIcon": {
               "type": "string"
+            },
+            "skipPlacement": {
+              "enum": [
+                "menu",
+                "overlay"
+              ]
+            },
+            "skipIcon": {
+              "type": "string"
+            },
+            "skipCooldown": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 60
             }
           }
         },
@@ -1874,6 +1916,12 @@
           ],
           "default": "audioEnd",
           "description": "What triggers the ending sequence: audio end (default), last video end, or character opacity fade-out"
+        },
+        "mediaBehavior": {
+          "type": "string",
+          "enum": ["wait", "continue"],
+          "default": "wait",
+          "description": "Wait for chapter media before the ending, or let it continue underneath the closing overlay"
         },
         "triggerCharacterId": {
           "type": "string",

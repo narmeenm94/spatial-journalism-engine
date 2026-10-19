@@ -34,8 +34,9 @@ test('new endings need no custom timings and can complete without quotes',()=>{
 
 test('original fade opacity and six-second wait determine the ending on the chapter clock',()=>{
  const s=story(),c=s.scenes.at(-1).characters.find(c=>c.id===s.ending.triggerCharacterId)
- assert.ok(Math.abs(characterEndingTime(c,s.ending)-85.2857142857)<.000001)
- assert.equal(characterEndingTime(c,{triggerDelay:0,triggerOpacity:0}),84)
+ assert.equal(c.delay,30000)
+ assert.ok(Math.abs(characterEndingTime(c,s.ending)-100.2857142857)<.000001)
+ assert.equal(characterEndingTime(c,{triggerDelay:0,triggerOpacity:0}),99)
  assert.equal(characterEndingTime({...c,duration:0},s.ending),Infinity)
 })
 
@@ -46,8 +47,8 @@ test('the scene clock waits for the fade delay and pauses without ending early',
  manager.currentScene={id:'scene4',isActive:true,characters:[c],videos:[],subtitles:[]};manager.currentSceneId='scene4'
  manager.characterSchedule=[{config:c,model:{visible:true,traverse(){}}}]
  manager.handleAudioTimeUpdate=()=>{};manager.handleSceneEnd=()=>sceneEnds++
- manager.elapsed=83;manager.update(1);assert.equal(completed,0);assert.equal(sceneEnds,0)
- manager.paused=true;manager.update(20);assert.equal(manager.elapsed,84);assert.equal(completed,0)
+ manager.elapsed=98;manager.update(1);assert.equal(completed,0);assert.equal(sceneEnds,0)
+ manager.paused=true;manager.update(20);assert.equal(manager.elapsed,99);assert.equal(completed,0)
  manager.paused=false;manager.update(1.3);assert.equal(completed,1)
  manager.update(1);assert.equal(completed,1)
 })

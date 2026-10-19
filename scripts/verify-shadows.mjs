@@ -27,6 +27,9 @@ const portable = await portableStory(story, files)
 const json = JSON.stringify(portable)
 const reopened = normalizeStory(JSON.parse(json))
 assertValidStory(reopened)
+assert.deepEqual(reopened.camera, story.camera, 'Single JSON round trip preserves tracked heights and every phone destination')
+assert.equal(reopened.ending.mediaBehavior, story.ending.mediaBehavior, 'Single JSON preserves ending narration behavior')
+assert.deepEqual(reopened.scenes.at(-1).characters, story.scenes.at(-1).characters, 'Single JSON preserves final character timing')
 for (const item of report) {
   const bytes = Buffer.from(
     reopened.embeddedAssets[item.path].split(',')[1],

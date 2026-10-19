@@ -108,7 +108,8 @@ export const tutorialTopics = [
     "steps": [
       "Frame your destination in the large canvas. In Camera path, choose a start time and Capture current view. Repeat for later moments.",
       "Select a stop to edit its time, move duration and easing. Edit from this view returns the editor to it; Replace with current view updates the destination. Scrub or play the camera preview.",
-      "In the reader, every cue moves from the reader’s current position. Physical tracking remains additive. Dragging interrupts that move until the next cue. Recenter returns to the latest destination. A duration of zero makes an immediate cut."
+        "In the reader, every cue moves from the reader's current position. Phone guidance uses the original upright rig and completes the current move before touch movement takes over. Web 3D allows a drag to interrupt. Recenter returns to the latest destination. A duration of zero makes an immediate cut.",
+        "Phone AR destination lets a stop use a separate phone view without changing its Web 3D view. Imported Shadows stops use the original phone destinations. Both views and the phone height settings travel with your single JSON file."
     ]
   },
   {
@@ -118,7 +119,8 @@ export const tutorialTopics = [
     "tab": "camera",
     "steps": [
       "Choose Move inside a full-size space for an experience like Shadows. Readers choose Guided or Explore before starting. This does not ask them to place the room on a table.",
-      "Explore on phone uses SLAM world tracking, with touch movement as an alternative. Guided normally uses orientation and touch; enable Physical movement + touch for tracked Guided mode.",
+        "Explore on phone uses SLAM world tracking, with touch movement as an alternative. Guided normally uses orientation and touch; enable Physical movement + touch for tracked Guided mode.",
+        "In Camera path settings, Phone eye height adjusts Android, iPhone/iPad and Guided heights for your space. Explore adds the phone's tracked height to that offset. Guided orientation mode keeps a fixed eye height. These values are included in your story JSON.",
       "For a miniature or artifact, use Place a model in the world. Web 3D supports manual and guided navigation. Headset VR follows the headset; automatic camera travel is not applied there."
     ]
   },
@@ -239,7 +241,7 @@ export const tutorialTopics = [
     "tab": "ending",
     "steps": [
       "In Ending, write the final text, quotes and link to further reporting. An optional video can accompany the ending.",
-      "Choose whether the ending follows audio, the last video or a character fade, and select the relevant chapter or character where provided.",
+      "Choose whether the ending follows audio, the last video or a character fade, and select the relevant chapter or character. Narration drives the chapter timeline. Chapter media can finish first or continue beneath your closing words, as in Shadows. Neither setting cuts off unfinished narration.",
       "Preview the final chapter all the way through. Choose Readable page or Cinematic sequence. Cinematic endings expose fade, reading and quote timings, video visibility and a return-to-title option. Play ending here uses the same renderer as the player, with pause, seek and skip controls."
     ]
   },
@@ -260,9 +262,9 @@ export const tutorialTopics = [
     "category": "Publish",
     "tab": "ui",
     "steps": [
-      "Serve the player and its media over HTTPS. Camera permission is requested when the reader starts phone AR; Web 3D is available when a device cannot start XR.",
-      "For surface AR, scan slowly and tap a detected surface. For image AR, prepare and select the image target in Appearance, then point the phone at the physical image. Full-space stories skip placement.",
-      "Check on a real phone in the intended lighting. Desktop preview cannot prove physical tracking quality. VR needs a compatible headset browser and uses its physical viewpoint."
+      "In Preview, choose Test on your phone, then Connect Netlify. Once the studio owner enables the connection, sign in and choose Create test link. The studio uploads your complete website and shows a QR automatically. Scan it, test your story, then choose Publish this tested version when ready. Download a website or use another host contains the manual ZIP option. Export story still creates your single editable JSON file.",
+      "Allow camera and motion access. Full-space stories skip placement; Explore uses world tracking, while Guided follows its authored tracking choice. Movement guidance helps readers initialise world tracking. Project & AR settings offers the standard or original exported 8th Wall framework.",
+      "For surface AR, scan and tap a surface. For image AR, point at the prepared target. Test both modes, device rotation, recenter, tracking recovery, chapter buttons and the ending on real phones. Desktop preview cannot prove SLAM quality. VR needs a compatible headset browser."
     ]
   },
   {

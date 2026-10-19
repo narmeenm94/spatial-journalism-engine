@@ -29,7 +29,9 @@
     },
     "ar": {
       "backend": "8thwall",
-      "tracking": "world"
+      "tracking": "world",
+      "runtime": "exported",
+      "coaching": true
     }
   },
   "environment": {
@@ -41,6 +43,12 @@
     ]
   },
   "camera": {
+    "trackedHeight": {
+      "android": 1.25,
+      "ios": 0.5,
+      "fallback": 0.5,
+      "guided": 1.5
+    },
     "initialPosition": [
       1.5,
       1.6,
@@ -88,7 +96,17 @@
             1.5707963267948957
           ],
           "duration": 2000,
-          "easing": "quadratic"
+          "easing": "quadratic",
+          "arPosition": [
+            1.5,
+            0,
+            -1.5
+          ],
+          "arRotation": [
+            0,
+            1.5707963267948966,
+            0
+          ]
         },
         {
           "id": "scene1-center-1",
@@ -104,7 +122,17 @@
             2.8434696857800525
           ],
           "duration": 2000,
-          "easing": "quadratic"
+          "easing": "quadratic",
+          "arPosition": [
+            1.5309367500701963,
+            0,
+            -2.0035898117832693
+          ],
+          "arRotation": [
+            -3.141592653589793,
+            0.8707963267948966,
+            -3.141592653589793
+          ]
         }
       ],
       "scene2": [
@@ -122,7 +150,17 @@
             2.8434696857800525
           ],
           "duration": 2000,
-          "easing": "quadratic"
+          "easing": "quadratic",
+          "arPosition": [
+            1.5309367500701963,
+            0,
+            -2.0035898117832693
+          ],
+          "arRotation": [
+            -3.141592653589793,
+            0.8707963267948966,
+            -3.141592653589793
+          ]
         },
         {
           "id": "scene2-bed-1",
@@ -138,7 +176,17 @@
             1.5707963267948957
           ],
           "duration": 2000,
-          "easing": "quadratic"
+          "easing": "quadratic",
+          "arPosition": [
+            1.9,
+            0,
+            -1
+          ],
+          "arRotation": [
+            0,
+            1.5707963267948966,
+            0
+          ]
         },
         {
           "id": "scene2-bed2-2",
@@ -154,7 +202,17 @@
             0.33455384542615235
           ],
           "duration": 2000,
-          "easing": "quadratic"
+          "easing": "quadratic",
+          "arPosition": [
+            1.6889367988700268,
+            0,
+            0.0626495252171494
+          ],
+          "arRotation": [
+            0,
+            0.9307963267948963,
+            0
+          ]
         },
         {
           "id": "scene2-bed-3",
@@ -170,7 +228,17 @@
             1.5707963267948957
           ],
           "duration": 2000,
-          "easing": "quadratic"
+          "easing": "quadratic",
+          "arPosition": [
+            1.9,
+            0,
+            -1
+          ],
+          "arRotation": [
+            0,
+            1.5707963267948966,
+            0
+          ]
         },
         {
           "id": "scene2-bed5-4",
@@ -186,7 +254,17 @@
             2.79379220138446
           ],
           "duration": 2000,
-          "easing": "quadratic"
+          "easing": "quadratic",
+          "arPosition": [
+            1.6592649441878433,
+            0,
+            -2.002370425799759
+          ],
+          "arRotation": [
+            -3.141592653589793,
+            0.9507963267948969,
+            -3.141592653589793
+          ]
         },
         {
           "id": "scene2-bed-5",
@@ -202,7 +280,17 @@
             1.5707963267948957
           ],
           "duration": 2000,
-          "easing": "quadratic"
+          "easing": "quadratic",
+          "arPosition": [
+            1.9,
+            0,
+            -1
+          ],
+          "arRotation": [
+            0,
+            1.5707963267948966,
+            0
+          ]
         },
         {
           "id": "scene2-bed4-6",
@@ -218,7 +306,17 @@
             3.1258392940893382
           ],
           "duration": 2000,
-          "easing": "quadratic"
+          "easing": "quadratic",
+          "arPosition": [
+            0.3739096130827566,
+            0,
+            -1.3783670305754008
+          ],
+          "arRotation": [
+            -3.141592653589793,
+            0.060796326794896736,
+            -3.141592653589793
+          ]
         },
         {
           "id": "scene2-bed3-7",
@@ -234,7 +332,17 @@
             3.1232406018916095
           ],
           "duration": 2000,
-          "easing": "quadratic"
+          "easing": "quadratic",
+          "arPosition": [
+            0.35986332259547305,
+            0,
+            -2.0323482824076358
+          ],
+          "arRotation": [
+            -3.141592653589793,
+            0.07079632679489685,
+            -3.141592653589793
+          ]
         },
         {
           "id": "scene2-bed5-8",
@@ -250,7 +358,17 @@
             2.79379220138446
           ],
           "duration": 2000,
-          "easing": "quadratic"
+          "easing": "quadratic",
+          "arPosition": [
+            1.6592649441878433,
+            0,
+            -2.002370425799759
+          ],
+          "arRotation": [
+            -3.141592653589793,
+            0.9507963267948969,
+            -3.141592653589793
+          ]
         },
         {
           "id": "scene2-bed-9",
@@ -266,7 +384,17 @@
             1.5707963267948957
           ],
           "duration": 2000,
-          "easing": "quadratic"
+          "easing": "quadratic",
+          "arPosition": [
+            1.9,
+            0,
+            -1
+          ],
+          "arRotation": [
+            0,
+            1.5707963267948966,
+            0
+          ]
         }
       ],
       "scene3": [
@@ -284,7 +412,17 @@
             2.8134420409465903
           ],
           "duration": 2000,
-          "easing": "quadratic"
+          "easing": "quadratic",
+          "arPosition": [
+            1.5763460892195245,
+            0,
+            -1.031905306427643
+          ],
+          "arRotation": [
+            -3.141592653589793,
+            0.9207963267948969,
+            -3.141592653589793
+          ]
         },
         {
           "id": "scene3-tour1-1",
@@ -300,7 +438,17 @@
             -1.8047116336250102
           ],
           "duration": 2000,
-          "easing": "quadratic"
+          "easing": "quadratic",
+          "arPosition": [
+            0.35051376571241155,
+            0,
+            -0.47517491800215095
+          ],
+          "arRotation": [
+            -3.141592653589793,
+            -1.5092036732051042,
+            -3.141592653589793
+          ]
         },
         {
           "id": "scene3-tour2-2",
@@ -316,7 +464,17 @@
             -2.074220963655102
           ],
           "duration": 2000,
-          "easing": "quadratic"
+          "easing": "quadratic",
+          "arPosition": [
+            0.2433312430095309,
+            0,
+            0.2733087328108672
+          ],
+          "arRotation": [
+            -3.141592653589793,
+            -1.429203673205103,
+            -3.141592653589793
+          ]
         },
         {
           "id": "scene3-tour3-3",
@@ -332,7 +490,17 @@
             -2.962931293269609
           ],
           "duration": 2000,
-          "easing": "quadratic"
+          "easing": "quadratic",
+          "arPosition": [
+            0.6515222222892838,
+            0,
+            0.5881659348465942
+          ],
+          "arRotation": [
+            -3.141592653589793,
+            -0.6092036732051034,
+            -3.141592653589793
+          ]
         },
         {
           "id": "scene3-tour4-4",
@@ -348,7 +516,17 @@
             -3.1392105049228225
           ],
           "duration": 2000,
-          "easing": "quadratic"
+          "easing": "quadratic",
+          "arPosition": [
+            1.026258215348678,
+            0,
+            0.733868845155103
+          ],
+          "arRotation": [
+            -3.141592653589793,
+            -0.00920367320510313,
+            -3.141592653589793
+          ]
         },
         {
           "id": "scene3-tour5-5",
@@ -364,7 +542,17 @@
             2.9697130720656713
           ],
           "duration": 2000,
-          "easing": "quadratic"
+          "easing": "quadratic",
+          "arPosition": [
+            0.33978776441137015,
+            0,
+            1.0287201241127182
+          ],
+          "arRotation": [
+            -3.141592653589793,
+            0.5907963267948966,
+            -3.141592653589793
+          ]
         },
         {
           "id": "scene3-tour6-6",
@@ -380,7 +568,17 @@
             2.389676847656258
           ],
           "duration": 2000,
-          "easing": "quadratic"
+          "easing": "quadratic",
+          "arPosition": [
+            0.47555918951558895,
+            0,
+            1.0042465004179175
+          ],
+          "arRotation": [
+            -3.141592653589793,
+            1.300796326794897,
+            -3.141592653589793
+          ]
         },
         {
           "id": "scene3-tour7-7",
@@ -396,7 +594,17 @@
             1.7988590349694964
           ],
           "duration": 2000,
-          "easing": "quadratic"
+          "easing": "quadratic",
+          "arPosition": [
+            -0.09264519981636066,
+            0,
+            1.8627531803780268
+          ],
+          "arRotation": [
+            -3.141592653589793,
+            1.510796326794897,
+            -3.141592653589793
+          ]
         },
         {
           "id": "scene3-tour8-8",
@@ -412,7 +620,17 @@
             -0.025754665311589302
           ],
           "duration": 2000,
-          "easing": "quadratic"
+          "easing": "quadratic",
+          "arPosition": [
+            0.8340634698171783,
+            0,
+            -0.7188134203866379
+          ],
+          "arRotation": [
+            0,
+            -0.09920367320510338,
+            0
+          ]
         },
         {
           "id": "scene3-tour9-9",
@@ -428,7 +646,17 @@
             1.5707963267948957
           ],
           "duration": 2000,
-          "easing": "quadratic"
+          "easing": "quadratic",
+          "arPosition": [
+            0.87,
+            0,
+            0.3500000000000001
+          ],
+          "arRotation": [
+            0,
+            1.5707963267948966,
+            0
+          ]
         },
         {
           "id": "scene3-tour10-10",
@@ -444,7 +672,17 @@
             -2.074220963655102
           ],
           "duration": 2000,
-          "easing": "quadratic"
+          "easing": "quadratic",
+          "arPosition": [
+            0.613331243009531,
+            0,
+            1.0733087328108672
+          ],
+          "arRotation": [
+            -3.141592653589793,
+            -1.429203673205103,
+            -3.141592653589793
+          ]
         },
         {
           "id": "scene3-tour11-11",
@@ -460,7 +698,17 @@
             -2.074220963655102
           ],
           "duration": 2000,
-          "easing": "quadratic"
+          "easing": "quadratic",
+          "arPosition": [
+            0.29333124300953095,
+            0,
+            0.24330873281086718
+          ],
+          "arRotation": [
+            -3.141592653589793,
+            -1.429203673205103,
+            -3.141592653589793
+          ]
         },
         {
           "id": "scene3-tour12-12",
@@ -476,7 +724,17 @@
             1.5707963267948957
           ],
           "duration": 2000,
-          "easing": "quadratic"
+          "easing": "quadratic",
+          "arPosition": [
+            1.41,
+            0,
+            -0.07000000000000006
+          ],
+          "arRotation": [
+            0,
+            1.5707963267948966,
+            0
+          ]
         }
       ],
       "scene4": [
@@ -494,7 +752,17 @@
             2.950914979055962
           ],
           "duration": 2000,
-          "easing": "quadratic"
+          "easing": "quadratic",
+          "arPosition": [
+            1.4443210621052813,
+            0,
+            -0.09918088475661291
+          ],
+          "arRotation": [
+            -3.141592653589793,
+            0.6407963267948964,
+            -3.141592653589793
+          ]
         },
         {
           "id": "scene4-olena-1",
@@ -510,7 +778,17 @@
             3.1362094440613184
           ],
           "duration": 2000,
-          "easing": "quadratic"
+          "easing": "quadratic",
+          "arPosition": [
+            0.3915165954206037,
+            0,
+            -0.28086788798867435
+          ],
+          "arRotation": [
+            -3.141592653589793,
+            0.02079632679489689,
+            -3.141592653589793
+          ]
         },
         {
           "id": "scene4-bed-2",
@@ -526,7 +804,17 @@
             3.1362094440613184
           ],
           "duration": 2000,
-          "easing": "quadratic"
+          "easing": "quadratic",
+          "arPosition": [
+            0.37151659542060367,
+            0,
+            -1.2608678879886743
+          ],
+          "arRotation": [
+            -3.141592653589793,
+            0.02079632679489689,
+            -3.141592653589793
+          ]
         }
       ]
     },
@@ -557,7 +845,7 @@
   },
   "rendering": {
     "toneMapping": "ACESFilmic",
-    "toneMappingExposure": 1.4,
+    "toneMappingExposure": 2,
     "fog": {
       "type": "exponential",
       "color": "0xcccccc",
@@ -2830,7 +3118,7 @@
             0
           ],
           "animation": "Idle_Oleh",
-          "delay": 15000,
+          "delay": 30000,
           "opacity": 0.7,
           "duration": 69000,
           "fadeIn": 3000,
@@ -3280,7 +3568,10 @@
       "showSkip": true,
       "showSettings": true,
       "recenterPlacement": "overlay",
-      "recenterIcon": "icons/recenter.png"
+      "recenterIcon": "icons/recenter.png",
+      "skipPlacement": "overlay",
+      "skipIcon": "icons/next.png",
+      "skipCooldown": 5
     },
     "screenDesigner": {
       "enabled": true,
@@ -4841,6 +5132,7 @@
       }
     },
     "triggerMode": "characterFade",
+    "mediaBehavior": "continue",
     "triggerCharacterId": "oleh-scene4",
     "triggerSceneId": "scene4",
     "presentation": "cinematic",

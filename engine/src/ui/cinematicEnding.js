@@ -1,3 +1,4 @@
+import { createEndingPlayback } from './endingPlayback.js'
 /** Timed closing sequence, shared by author preview and the audience player. */
 export const cinematicDefaults={fadeIn:4,textDelay:2,textDuration:13,textFade:3,quoteFade:2,videoDelay:1,actionsDelay:1,videoOn:'all',muted:true,quoteTimings:[]}
 export function endingTimeline(config) {
@@ -33,20 +34,23 @@ export function renderCinematicEnding(host,config,options={}) {
  const seek=document.createElement('input');seek.type='range';seek.min='0';seek.max=String(timeline.duration);seek.step='.1';seek.setAttribute('aria-label','Ending playhead');seek.style.cssText='width:clamp(80px,25%,240px);accent-color:#fff';controls.appendChild(seek)
  const skip=document.createElement('button');skip.textContent='Skip ending';skip.style.cssText=buttonStyle;controls.appendChild(skip)
  const playFilm=document.createElement('button');playFilm.textContent='Play ending film';playFilm.style.cssText=buttonStyle+';position:absolute;right:12px;top:12px';playFilm.hidden=true;host.appendChild(playFilm)
- let elapsed=0,paused=false,disposed=false,last=performance.now(),frame,previousQuote=-2,videoFailed=false
+ const playback=options.playback||createEndingPlayback()
+ let elapsed=0,paused=false,linked=false,disposed=false,last=performance.now(),frame,previousQuote=-2,videoFailed=false
+ const sync=(delta=0)=>{const state=playback.sample(delta);elapsed=state.elapsed;paused=state.paused;linked=state.linked}
  const paint=()=>{
   const state=sampleEnding(config,elapsed);backdrop.style.opacity=String(state.overlayOpacity);message.style.opacity=String(state.textOpacity);message.hidden=state.textOpacity<=0
   if(state.quoteIndex!==previousQuote){quote.textContent=state.quoteIndex<0?'':local(config.quotes[state.quoteIndex]);previousQuote=state.quoteIndex}
   quote.style.opacity=String(state.quoteOpacity);quote.hidden=state.quoteOpacity<=0;actions.hidden=!state.complete;actions.style.display=state.complete?'flex':'none'
-  playFilm.hidden=!state.videoVisible||!videoFailed;pause.hidden=state.complete;skip.hidden=state.complete;seek.value=String(elapsed)
+  playFilm.hidden=!state.videoVisible||!videoFailed;pause.hidden=state.complete&&!linked;skip.hidden=state.complete||linked;seek.value=String(Math.min(elapsed,timeline.duration))
+  pause.textContent=paused?'Play ending':'Pause ending';seek.disabled=linked;seek.title=linked?'Follows chapter narration':''
   if(showFilm){video.hidden=!state.videoVisible;if(!state.videoVisible||paused)video.pause();else if(!videoFailed){if(Number.isFinite(video.duration)&&Math.abs(video.currentTime-state.videoTime)>.5)video.currentTime=Math.min(state.videoTime,video.duration);if(video.paused&&!video.ended)video.play().catch(()=>{if(!disposed){videoFailed=true;playFilm.hidden=false}})}}
  }
- playFilm.onclick=()=>video.play().then(()=>{videoFailed=false;playFilm.hidden=true}).catch(()=>{playFilm.textContent='Film unavailable';playFilm.disabled=true})
- pause.onclick=()=>{paused=!paused;pause.textContent=paused?'Play ending':'Pause ending';last=performance.now();paint()}
- seek.oninput=()=>{elapsed=Number(seek.value);last=performance.now();paint()}
- skip.onclick=()=>{elapsed=timeline.duration;paint();replay.focus()}
- const tick=now=>{if(disposed)return;if(!paused)elapsed=Math.min(timeline.duration,elapsed+(now-last)/1000);last=now;paint();frame=requestAnimationFrame(tick)}
- paint();frame=requestAnimationFrame(tick)
+ playFilm.onclick=()=>{playback.setPaused(false);sync();if(paused)return;video.play().then(()=>{videoFailed=false;playFilm.hidden=true}).catch(()=>{playFilm.textContent='Film unavailable';playFilm.disabled=true})}
+ pause.onclick=()=>{sync();playback.setPaused(!paused);sync();last=performance.now();paint()}
+ seek.oninput=()=>{playback.seek(Number(seek.value));sync();last=performance.now();paint()}
+ skip.onclick=()=>{playback.seek(timeline.duration);sync();paint();if(!linked)replay.focus()}
+ const tick=now=>{if(disposed)return;sync((now-last)/1000);last=now;paint();frame=requestAnimationFrame(tick)}
+ sync();paint();frame=requestAnimationFrame(tick)
  return ()=>{disposed=true;cancelAnimationFrame(frame);video.pause();video.removeAttribute('src');video.load();host.replaceChildren()}
 }
 

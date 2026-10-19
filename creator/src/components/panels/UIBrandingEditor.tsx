@@ -44,6 +44,12 @@ export function UIBrandingEditor() {
       <details className="designer-precision"><summary>Player controls</summary>
         <label className="form-group">Recenter shortcut<select className="form-select" aria-label="Recenter shortcut" value={ui.controls.recenterPlacement||'menu'} onChange={e=>updateStory(d=>{d.ui.controls.recenterPlacement=e.target.value as 'menu'|'overlay'})}><option value="menu">Inside the player menu</option><option value="overlay">Visible corner button</option></select></label>
         {ui.controls.recenterPlacement==='overlay'&&<label className="form-group">Recenter icon<input aria-label="Upload recenter icon" type="file" accept="image/png,image/svg+xml,image/webp" onChange={e=>{const file=e.target.files?.[0];if(file){const path='ui/'+crypto.randomUUID().slice(0,8)+'-'+file.name;useStore.getState().addAssetFile(path,file);updateStory(d=>{d.ui.controls.recenterIcon=path})}e.target.value=''}}/></label>}
+        <label className="form-group">Next chapter shortcut<select className="form-select" value={ui.controls.skipPlacement||'menu'} onChange={e=>updateStory(d=>{d.ui.controls.skipPlacement=e.target.value as 'menu'|'overlay'})}><option value="menu">Inside the player menu</option><option value="overlay">Visible corner button</option></select></label>
+        {ui.controls.skipPlacement==='overlay'&&<>
+          <label className="form-group">Chapter shortcut icon<input type="file" accept="image/png,image/svg+xml,image/webp" onChange={e=>{const file=e.target.files?.[0];if(file){const path='ui/'+crypto.randomUUID().slice(0,8)+'-'+file.name;useStore.getState().addAssetFile(path,file);updateStory(d=>{d.ui.controls.skipIcon=path})}e.target.value=''}}/></label>
+          <label className="form-group">Wait before skipping (seconds)<input className="form-input" type="number" min="0" max="60" value={ui.controls.skipCooldown??5} onChange={e=>{const value=Number(e.target.value);if(Number.isFinite(value))updateStory(d=>{d.ui.controls.skipCooldown=Math.min(60,Math.max(0,value))})}}/></label>
+          <p className="form-hint">The shortcut hides on the last chapter and yields to visible in-scene chapter buttons.</p>
+        </>}
       </details>
       <h4 style={{ marginBottom: 12 }}>Phone AR</h4>
       <div className="form-group">
@@ -70,6 +76,17 @@ export function UIBrandingEditor() {
           <option value="8thwall">8th Wall</option>
         </select>
       </div>
+      <details className="designer-precision">
+        <summary>AR guidance and compatibility</summary>
+        <label className="form-group">8th Wall runtime
+          <select className="form-select" value={story.project.ar?.runtime || (story.camera.navigation === 'immersive' ? 'exported' : 'standard')} onChange={e=>updateStory(d=>{d.project.ar={...d.project.ar,runtime:e.target.value as 'standard'|'exported'}})}>
+            <option value="standard">Standard framework</option>
+            <option value="exported">Original exported framework</option>
+          </select>
+        </label>
+        <p className="form-hint">Shadows uses the exported framework paired with its SLAM engine. Image tracking always uses the standard framework.</p>
+        <label><input type="checkbox" checked={story.project.ar?.coaching!==false} onChange={e=>updateStory(d=>{d.project.ar={...d.project.ar,coaching:e.target.checked}})}/> Show movement guidance while the camera finds the space</label>
+      </details>
       <p className="form-hint">
         World tracking places a story in the room. Image tracking anchors it to
         a printed photograph or exhibit label. Test on your phone over HTTPS.

@@ -54,6 +54,8 @@ The player supports **Web 3D, phone AR and headset VR**. AR and VR require compa
 
 Deploy `creator/dist/` for the studio and player, or `dist/` for the player alone. [Hosting, device requirements and tracking limitations](docs/studio-guide.md#share-and-play).
 
+To publish an authored experience, use **Preview → Test on your phone → Connect Netlify**. Once the studio owner enables the connection, **Create test link** uploads the complete experience and generates a QR automatically. **Publish this tested version** is a separate action after testing on a phone. Website ZIP downloads, Netlify Drop and GitHub Pages remain available. [Phone testing and publishing walkthrough](docs/phone-testing-and-publishing.md) · [Enable the Netlify connection](docs/netlify-connection.md).
+
 The engine code is MIT licensed. Bundled dependencies, tracking binaries, fonts and documentary assets retain their respective terms; the repository license does not grant additional rights to them. [Tracking license details](docs/studio-guide.md#devices-and-verification-limits).
 
 ## Documentation and development

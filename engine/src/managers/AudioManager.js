@@ -18,9 +18,10 @@ export class AudioManager {
     this.positionUpdateCallbacks = new Map()
     this.timeUpdateCallbacks = new Map()
 
-    // Manual time tracking (more reliable than Three.js internals)
+    // Playback offsets follow the audio device clock, which freezes when the
+    // browser suspends audio. Wall time would run ahead of audible narration.
     this.playOffsets = new Map()
-    this.playStartTimes = new Map() // audioId -> performance.now() when play started
+    this.playStartTimes = new Map() // audioId -> AudioContext time in seconds
     this.timeTrackingActive = new Map() // audioId -> boolean
 
     this.initListener()
@@ -167,7 +168,7 @@ export class AudioManager {
         sound.play()
         this.currentAudio = audioId
         // Record the actual time when playback started
-        this.playStartTimes.set(audioId, performance.now())
+        this.playStartTimes.set(audioId, this.getClockTime(sound))
         this.startTimeTracking(audioId)
         console.log(`Audio playing: ${audioId}`)
       } catch (error) {
@@ -177,7 +178,7 @@ export class AudioManager {
   }
 
   /**
-   * Start time tracking for audio using performance.now()
+   * Start playback-time notifications
    * @param {string} audioId - Audio identifier
    */
   startTimeTracking(audioId) {
@@ -193,7 +194,7 @@ export class AudioManager {
         return
       }
 
-      // Calculate current time using performance.now() for reliability
+      // Read the same clock that advances the audio source.
       const startTime = this.playStartTimes.get(audioId)
       if (startTime === undefined) return
 
@@ -305,12 +306,18 @@ export class AudioManager {
    * @returns {number} Current time in seconds
    */
   getCurrentTime(audioId) {
+    const sound = this.sounds.get(audioId)
     const startTime = this.playStartTimes.get(audioId)
     const offset = this.playOffsets.get(audioId) || 0
     if (startTime !== undefined && this.timeTrackingActive.get(audioId)) {
-      return offset + (performance.now() - startTime) / 1000
+      const time = offset + Math.max(0, this.getClockTime(sound) - startTime) * (sound?.playbackRate ?? 1)
+      return sound?.loop ? time : Math.min(time, sound?.buffer?.duration ?? Infinity)
     }
     return offset
+  }
+
+  getClockTime(sound) {
+    return sound?.context?.currentTime ?? this.listener?.context?.currentTime ?? performance.now() / 1000
   }
 
   /**

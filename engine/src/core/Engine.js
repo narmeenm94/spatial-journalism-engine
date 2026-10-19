@@ -1,4 +1,8 @@
+import { resolveExperienceMode } from '../xr/device.js'
+import { trackedNavigation } from '../controls/trackedNavigation.js'
+import { createChapterShortcut } from '../ui/chapterShortcut.js'
 import { renderCinematicEnding } from '../ui/cinematicEnding.js'
+import { createEndingPlayback } from '../ui/endingPlayback.js'
 import { captionStyles, normalizeCaptionStyle } from '../ui/captionStyle.js'
 /**
  * SJEngine - Main Spatial Journalism Engine class
@@ -10,7 +14,8 @@ import { SceneButtonManager } from '../managers/SceneButtonManager.js'
 import { sceneButtonTarget } from '../ui/sceneButtons.js'
 import { SoundscapeManager } from '../managers/SoundscapeManager.js'
 import { showReaderGuide } from '../managers/ReaderGuide.js'
-import { loadEighthWall, createEighthWallScene } from '../xr/EighthWall.js'
+import { createMotionPermission } from '../xr/MotionPermission.js'
+import { loadEighthWall, createEighthWallScene, loadCoachingOverlay } from '../xr/EighthWall.js'
 import storySchema from '../../schema/story.schema.json'
 import { JSONParser } from './JSONParser.js'
 import { AssetLoader } from './AssetLoader.js'
@@ -35,6 +40,7 @@ export class Engine {
    */
   constructor(options = {}) {
     this.options = options
+    this.motionPermission = createMotionPermission()
     this.container =
       options.container ||
       document.getElementById('sj-container') ||
@@ -99,6 +105,7 @@ export class Engine {
       this.uiManager = new UIManager({
         container: this.container,
         defaultLanguage: this.currentLanguage,
+        motionPermission: this.motionPermission,
         storyBaseUrl: this.parser.storyBaseUrl,
         onLanguageChange: (lang) => this.handleLanguageChange(lang),
         onModeSelect: (mode) => this.handleModeSelect(mode),
@@ -139,14 +146,13 @@ export class Engine {
     // Check for forced mode from URL params (used by Creator preview)
     const params = new URLSearchParams(window.location.search)
     const forcedMode = params.get('mode')
-    if (forcedMode) {
+    if (['3d', 'ar', 'vr'].includes(forcedMode)) {
       this.startExperience(forcedMode)
       return
     }
 
     if (this.story.camera?.navigation === 'immersive') {
-      const mobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || navigator.maxTouchPoints > 1
-      this.startExperience(mobile && this.story.project.modes?.includes('ar') ? 'ar' : '3d')
+      this.startExperience(resolveExperienceMode('auto', this.story.project.modes))
       return
     }
     // Show mode selection if multiple modes available
@@ -176,6 +182,7 @@ export class Engine {
    */
   async startExperience(mode) {
     if (this.starting || this.isRunning) return
+    mode = resolveExperienceMode(mode, this.story.project.modes)
     this.immersiveNavigation = this.story.camera?.navigation === 'immersive'
     if (!this.navigationMode && (this.immersiveNavigation || this.story.camera?.chooseMode)) {
       this.uiManager.hide('homeScreen')
@@ -194,6 +201,8 @@ export class Engine {
 
     try {
       const arConfig = this.story.project.ar || {}
+      const arRuntime = arConfig.runtime || (this.immersiveNavigation ? 'exported' : 'standard')
+      if (mode === 'ar') await this.motionPermission.request()
       const backend =
         new URLSearchParams(window.location.search).get('arBackend') ||
         arConfig.backend ||
@@ -231,10 +240,12 @@ export class Engine {
             error.name !== 'NotSupportedError'
           )
             throw error
-          this.eighthWall = await loadEighthWall()
+          this.eighthWall = await loadEighthWall({ runtime: arRuntime })
         }
       } else if (mode === 'ar')
-        this.eighthWall = await loadEighthWall({ imageTracking })
+        this.eighthWall = await loadEighthWall({ imageTracking, runtime: arRuntime })
+      if (this.eighthWall && !imageTracking && arConfig.coaching !== false)
+        this.coachingOverlay = await loadCoachingOverlay()
       await this.initializeThreeScene()
 
       // Preload and load environment
@@ -324,7 +335,9 @@ export class Engine {
     panel.style.cssText =
       'position:fixed;inset:0;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:24px;padding:40px;background:#f7f7f5;color:#222222;z-index:20000;font:17px/1.5 Segoe UI,sans-serif;text-align:center'
     const message = document.createElement('p')
-    message.textContent = error.message
+    message.textContent = error instanceof TypeError || error instanceof ReferenceError || error instanceof SyntaxError
+      ? 'The player could not finish starting. Reload to try again, or continue in Web 3D.'
+      : error.message
     panel.appendChild(message)
     const retry = document.createElement('button')
     retry.textContent = 'Continue in Web 3D'
@@ -395,6 +408,7 @@ export class Engine {
         this.sceneManager?.pause()
         this.isRunning = false
         this.playbackBar?.remove()
+        this.chapterShortcut?.dispose()
         if (wasRunning)
           this.showPlayerError(
             new Error(
@@ -534,11 +548,25 @@ export class Engine {
           this.story.project.assets.basePath
         )
       }))
+      this.trackingNavigation = this.immersiveNavigation ? trackedNavigation(this.story.camera, {
+        guided: this.guidedEnabled,
+        isUsingApp: new URLSearchParams(window.location.search).get('isUsingApp') === 'true'
+      }) : null
       const result = await createEighthWallScene(this.eighthWall, {
         container: this.container,
         imageTargets,
-        disableWorldTracking: this.immersiveNavigation && this.guidedEnabled && this.story.camera.guidedTracking !== 'world',
+        disableWorldTracking: !!this.trackingNavigation?.orientationOnly,
+        initialPose: this.immersiveNavigation ? {
+          position: this.story.camera.initialPosition || [1.5, 1.6, -1.5],
+          rotation: this.story.camera.initialRotation || [0, Math.PI / 2, 0]
+        } : undefined,
         onUpdate: () => this.update(),
+        updateBeforeRender: this.immersiveNavigation,
+        coachingOverlay: this.coachingOverlay,
+        language: this.currentLanguage,
+        onRender: () => this.immersiveNavigation && this.isRunning &&
+          this.interactionManager?.renderWithComposer(),
+        onResize: (width, height) => this.interactionManager?.onResize(width, height),
         onTracking: (detail) => this.onARTracking(detail),
         onImage: (state, detail) => this.onARImage(state, detail),
         onError: (error) => {
@@ -566,13 +594,13 @@ export class Engine {
       this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
       this.renderer.setSize(window.innerWidth, window.innerHeight)
       this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-      // Match original project's renderer settings exactly:
-      // sRGBEncoding + ACESFilmicToneMapping + exposure 2 creates the cinematic look
-      this.renderer.outputEncoding = THREE.sRGBEncoding
-      this.renderer.toneMapping = THREE.ACESFilmicToneMapping
-      this.renderer.toneMappingExposure = 2
       this.container.appendChild(this.renderer.domElement)
     }
+
+    // Apply the same authored look to Web 3D and camera-based rendering.
+    this.renderer.outputEncoding = THREE.sRGBEncoding
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping
+    this.renderer.toneMappingExposure = 2
 
     // Handle window resize
     this._resizeHandler = () => this.onWindowResize()
@@ -631,6 +659,8 @@ export class Engine {
       container: this.container,
       scene: this.scene,
       tracked: !!this.eighthWall,
+      trackingNavigation: this.trackingNavigation,
+      trackingActive: this._lastTrackingStatus === 'NORMAL',
       rotationEnabled: cameraConfig.rotationEnabled !== false,
       onNavigate: () => this.guidedCameraController?.interrupt(),
       moveSpeed: cameraConfig.moveSpeed || 0.005,
@@ -720,7 +750,11 @@ export class Engine {
   onARTracking(detail) {
     const status = detail?.status
     if (this.immersiveNavigation) {
-      if (status !== this._lastTrackingStatus) this.cameraControls?.preserveTrackingPose()
+      // The original rig rebases on coaching transitions, not every tracker
+      // quality notification, which can arrive repeatedly during motion.
+      if (detail?.source !== 'coaching') return
+      if (status !== 'LIMITED' && status !== 'NORMAL') return
+      this.cameraControls?.preserveTrackingPose(status === 'NORMAL')
       this._lastTrackingStatus = status
       return
     }
@@ -895,7 +929,7 @@ export class Engine {
     }
 
     // Initialize outline postprocessing effect for interactive objects
-    if (this.mode !== 'ar')
+    if (this.mode !== 'ar' || this.immersiveNavigation)
       this.interactionManager.initOutlineEffect(
         this.scene,
         this.camera,
@@ -915,8 +949,9 @@ export class Engine {
         cameraRig, // null when no CameraRigControls — controller will animate the camera directly
         this.story.camera.guided,
         {
-          position: this.story.camera.initialPosition || [0, 1.6, 3],
-          rotation: this.story.camera.initialRotation || [0, 0, 0]
+          animateTrackedPose: this.eighthWall && this.cameraControls
+            ? (position, quaternion, duration) => this.cameraControls.animateTo(position, quaternion, duration)
+            : undefined
         }
       )
 
@@ -941,14 +976,14 @@ export class Engine {
     if (this.cameraControls?.cameraRig) {
       // Re-apply position through the rig in case loadEnvironment is called
       // after initializeCameraControls
-      const pos = cameraConfig.initialPosition
+      const pos = !this.eighthWall && cameraConfig.initialPosition
         ? {
             x: cameraConfig.initialPosition[0],
             y: cameraConfig.initialPosition[1],
             z: cameraConfig.initialPosition[2]
           }
         : this.cameraControls.settings.recenterPosition
-      const rot = cameraConfig.initialRotation
+      const rot = !this.eighthWall && cameraConfig.initialRotation
         ? {
             x: cameraConfig.initialRotation[0],
             y: cameraConfig.initialRotation[1],
@@ -1098,6 +1133,7 @@ export class Engine {
    */
   createUIControls() {
     this.playbackBar?.remove()
+    this.chapterShortcut?.dispose()
     this.playerMenuEvents?.abort()
     const menu = document.createElement('details')
     menu.style.cssText = 'position:fixed;top:16px;right:16px;z-index:9999;color:#222;font:14px Segoe UI,sans-serif'
@@ -1226,6 +1262,7 @@ export class Engine {
     const signal = this.playerMenuEvents.signal
     document.addEventListener('pointerdown', event => { if (!menu.contains(event.target)) menu.open = false }, { signal })
     menu.addEventListener('keydown', event => { if (event.key === 'Escape') { menu.open = false; toggle.focus(); event.stopPropagation() } }, { signal })
+    this.chapterShortcut = createChapterShortcut(this)
     const controls = {} // Navigation is available in the chapter toolbar.
 
     // Don't add recenter button here - CameraRigControls creates its own
@@ -1281,11 +1318,15 @@ export class Engine {
    */
   onWindowResize() {
     if (this.camera && this.renderer) {
-      this.camera.aspect = window.innerWidth / window.innerHeight
-      this.camera.updateProjectionMatrix()
-      this.renderer.setSize(window.innerWidth, window.innerHeight)
+      // XR8 owns camera intrinsics and canvas resizing. Replacing its projection
+      // with a perspective-camera matrix breaks registration after rotation.
+      if (!this.eighthWall) {
+        this.camera.aspect = window.innerWidth / window.innerHeight
+        this.camera.updateProjectionMatrix()
+        this.renderer.setSize(window.innerWidth, window.innerHeight)
+      }
       // Resize composer for outline effect
-      if (this.interactionManager) {
+      if (this.interactionManager && !this.eighthWall) {
         this.interactionManager.onResize(window.innerWidth, window.innerHeight)
       }
     }
@@ -1297,6 +1338,7 @@ export class Engine {
    */
   handleLanguageChange(language) {
     this.currentLanguage = language
+    this.coachingOverlay?.configure({ promptText: language === 'fi' ? 'Liikuta laitetta eteen ja taakse' : 'Move device forward and back' })
     this.parser.currentLanguage = language
     if (this.chapterSelect)
       this.story.scenes.forEach((scene, i) => {
@@ -1358,6 +1400,7 @@ export class Engine {
     if (this.mode === 'ar' && (!this.arPlaced || !this.roomModel.visible))
       this.sceneManager.pause()
     this.sceneButtons?.load(scene)
+    this.chapterShortcut?.update()
     console.log(`Scene started: ${scene.id}`)
     if (this.chapterSelect) this.chapterSelect.value = scene.id
     if (this.pauseButton) this.pauseButton.textContent = 'Pause'
@@ -1378,6 +1421,7 @@ export class Engine {
    */
   handleSceneEnd(scene) {
     this.sceneButtons?.update()
+    this.chapterShortcut?.update()
     if (this.pauseButton) this.pauseButton.textContent = 'Replay'
     if (scene.sceneButtons?.some(button => sceneButtonTarget(button, this.story.scenes, scene.id))) return
     console.log(`Scene ended: ${scene.id}`)
@@ -1412,6 +1456,7 @@ export class Engine {
   handleComplete() {
     if (this.completed) return
     this.completed = true
+    this.chapterShortcut?.update()
     console.log('Experience complete')
     this.isRunning = false
     this.sceneManager?.pause()
@@ -1423,7 +1468,7 @@ export class Engine {
     }
 
     // Show ending if configured
-    if (this.story.ending) {
+    if (this.story.ending && !this._showingEnding) {
       this.showEnding()
     }
   }
@@ -1435,7 +1480,9 @@ export class Engine {
     if (this.guidedEnabled && this.guidedCameraController?.destination && this.cameraControls) {
       const cue = this.guidedCameraController.destination
       this.guidedCameraController.interrupt()
-      this.cameraControls.animateTo(new THREE.Vector3().fromArray(cue.position), new THREE.Quaternion().setFromEuler(new THREE.Euler(...cue.rotation)), 1000)
+      const position = this.eighthWall && cue.arPosition || cue.position
+      const rotation = this.eighthWall && cue.arRotation || cue.rotation
+      this.cameraControls.animateTo(new THREE.Vector3().fromArray(position), new THREE.Quaternion().setFromEuler(new THREE.Euler(...rotation)), 1000)
       return true
     }
     if (this.eighthWall && !this.immersiveNavigation) {
@@ -1458,7 +1505,9 @@ export class Engine {
 
     const delta = this.clock.getDelta()
 
-    this.soundscape?.update(!!this.sceneManager?.paused || this._showingEnding)
+    this.soundscape?.update(!!this.sceneManager?.paused || (this._showingEnding && this.story.ending?.mediaBehavior !== 'continue'))
+    // Queue due destinations, then run the original rig's frame order:
+    // tracking rebase, animation, device height, bounds.
     this.guidedCameraController?.update()
 
     // Update camera controls
@@ -1477,6 +1526,7 @@ export class Engine {
     }
 
     this.sceneButtons?.update()
+    this.chapterShortcut?.update()
     this.updateXRCaption()
     // Update scene manager (handles character animations)
     if (this.sceneManager) {
@@ -1529,7 +1579,7 @@ export class Engine {
   async showEnding() {
     this.guidedCameraController?.interrupt()
     this._showingEnding = true
-    this.soundscape?.update(true)
+    if (this.story.ending?.mediaBehavior !== 'continue') this.soundscape?.update(true)
     const config = this.story.ending || {}
     this.disposeEnding?.()
     document.getElementById('sj-ending')?.remove()
@@ -1626,7 +1676,7 @@ export class Engine {
     if(config.presentation==='cinematic') {
       overlay.replaceChildren();overlay.style.cssText='position:fixed;inset:0;z-index:10000'
       const stage=document.createElement('div');overlay.appendChild(stage)
-      this.disposeEnding=renderCinematicEnding(stage,config,{language:this.currentLanguage,font:this.story.ui.branding?.font,mobile:matchMedia('(max-width:767px)').matches,resolveAsset:p=>this.parser.resolvePath(p,this.story.project.assets.basePath),onReplay:()=>replay.onclick()})
+      this.disposeEnding=renderCinematicEnding(stage,config,{language:this.currentLanguage,font:this.story.ui.branding?.font,mobile:matchMedia('(max-width:767px)').matches,resolveAsset:p=>this.parser.resolvePath(p,this.story.project.assets.basePath),onReplay:()=>replay.onclick(),playback:config.mediaBehavior==='continue'?createEndingPlayback(this):undefined})
     } else replay.focus()
   }
 
@@ -1665,6 +1715,7 @@ export class Engine {
 
   pause() {
     if (this.pauseButton) this.pauseButton.textContent = 'Resume'
+    this.soundscape?.update(true)
     if (this.sceneManager) {
       this.sceneManager.pause()
     }
@@ -1719,6 +1770,7 @@ export class Engine {
     this.xrSession?.end().catch(() => {})
     window.removeEventListener('resize', this._resizeHandler)
     this.playbackBar?.remove()
+    this.chapterShortcut?.dispose()
     this.arHitSource?.cancel()
     this.arPrompt?.remove()
     this.arReticle?.geometry.dispose()
